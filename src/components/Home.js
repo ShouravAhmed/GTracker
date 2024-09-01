@@ -1,7 +1,7 @@
 import "../assets/styles/Home.css";
 
-import { useNavigate, useLocation, Link } from "react-router-dom";
-import React, { useContext, useState, useEffect, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
+import React, { useState } from "react";
 
 function Home() {
     const navigate = useNavigate();
