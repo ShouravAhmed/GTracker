@@ -1,0 +1,178 @@
+/* General page styling */
+body {
+  background-color: #ffffff;
+  font-family: 'Arial', sans-serif;
+  margin: 0;
+  padding: 0;
+  color: #333;
+}
+
+.gamam-tracker {
+  padding: 20px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+/* Title styling */
+h1 {
+  text-align: center;
+  font-size: 2.5rem;
+  color: #333;
+  margin-bottom: 40px;
+}
+
+/* Problem list styling */
+.day-list {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.problem-list {
+  background-color: #fff;
+  border-radius: 10px;
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+  padding: 20px;
+  transition: transform 0.2s ease;
+  display: flex;
+  flex-direction: column;
+}
+
+.problem-list:hover {
+  transform: translateY(-5px);
+}
+
+/* Day title block styling */
+.day-title-block {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 0;
+  margin-bottom: 20px;
+}
+
+.day-title {
+  font-size: 1.5rem;
+  font-weight: bold;
+  color: #333;
+}
+
+.day-status {
+  padding: 10px 35px;
+  font-size: 1rem;
+  color: #fff;
+  border-radius: 15px;
+  display: inline-block; 
+  font-weight: bold;
+}
+
+.day-status.completed {
+  background-color: seagreen;
+}
+
+.day-status.pending {
+  background-color: rgb(211, 68, 57);
+}
+
+
+/* Problem row styling */
+.problem-row {
+  display: grid;
+  grid-template-columns: 40px 1fr 65px 65px;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px solid #eee;
+  font-size: 1rem;
+}
+
+.problem-row:last-child {
+  border-bottom: none;
+}
+
+.problem-no {
+  text-align: center;
+  font-weight: bold;
+}
+
+.problem-url {
+  text-decoration: none;
+  color: #007BFF;
+}
+
+.problem-url:hover {
+  text-decoration: underline;
+}
+
+.problem-difficulty {
+  text-align: center;
+  color: #666;
+  font-weight: 500;
+}
+.problem-difficulty.easy {
+  color: Green;
+}
+.problem-difficulty.medium {
+  color: orange;
+}
+.problem-difficulty.hard {
+  color: red;
+}
+
+.problem-status {
+  text-align: center;
+  padding: 5px;
+  margin: 0px;
+  border-radius: 20px;
+  cursor: pointer;
+  color: #fff;
+  font-weight: bold;
+  font-size: 0.8rem;
+  width: 60px;
+}
+
+.problem-solved {
+  background-color: seagreen;
+}
+
+.problem-unsolved {
+  background-color: rgb(238, 109, 109);
+}
+
+
+.summary-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px;
+  background-color: #f9f9f9;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  margin-bottom: 20px;
+  border-radius: 10px;
+  color: rgb(238, 109, 109);
+}
+
+.summary-item {
+  font-size: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.summary-item span {
+  font-weight: normal;
+  color: #555;
+}
+
+.summary-item strong {
+  font-size: 2rem;
+  font-weight: bold;
+  margin-top: 5px;
+}
+
+.summary-item.left {
+  text-align: left;
+}
+
+.summary-item.right {
+  text-align: right;
+}
