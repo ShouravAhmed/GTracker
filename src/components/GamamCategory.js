@@ -6,7 +6,7 @@ import gamamJson from "../assets/json/gamam150.json";
 
 function GamamCategory({ categoryName }) {
 
-    const [problemsList, setProblemsList] = useState({});
+    const [problemsList, setProblemsList] = useState([]);
     const [problemStatusToggle, setProblemStatusToggle] = useState(false);    
 
     const fetchCodingProblems = () => {
@@ -50,7 +50,6 @@ function GamamCategory({ categoryName }) {
                     <a className="problem-url" href={problem.url} target="_blank" rel="noopener noreferrer">{problem.name}</a>
                     
                     <div className="problem-difficulty">
-                    <span>{problem.type}</span>
                     {problem.difficulty && <span className={`${problem.difficulty === '(Easy)' ? "problem-difficulty-easy" : (problem.difficulty === '(Medium)' ? 'problem-difficulty-medium' : 'problem-difficulty-hard')}`}>{problem.difficulty}</span>}
                     </div>
 
