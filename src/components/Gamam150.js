@@ -100,19 +100,6 @@ function Gamam150() {
         return cnt === problems.length;
     };
 
-    const isDayCompleted = (day) => {
-      const problems = codingProblems[day];
-      
-      let cnt = 0;
-      for(const problem of problems) {
-        const status = localStorage.getItem(problem.name);
-        if(status === 'true') {
-          cnt += 1;
-        }
-      }
-      return cnt === problems.length;
-    }
-
     const isProblemSolved = (problemName) => {
       const status = localStorage.getItem(problemName);
       return (status === 'true');
