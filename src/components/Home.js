@@ -4,43 +4,46 @@ import { useNavigate } from "react-router-dom";
 import React, { useState } from "react";
 
 function Home() {
-    const navigate = useNavigate();
-    const [leetcodeUsername, setLeetcodeUsername] = useState('');
-
-  const handleInputChange = (e) => {
-    setLeetcodeUsername(e.target.value);
-  };
+  const navigate = useNavigate();
 
   return (
-    <div className="home-container">
-      <div className="user-section">
-        <div className="input-container">
-          <input
-            type="text"
-            placeholder="Enter Leetcode Username"
-            value={leetcodeUsername}
-            onChange={handleInputChange}
-            className="input-field"
-          />
+    <div className="home">
+        <h1 className="home-title">Cracking the GAMAM Technical Interview</h1>
+        
+        <div className="home-row" onClick={() => navigate('gamam-150')}>
+          <span className="home-item-no">1</span>
+          <span className="home-item-url">GAMAM 150 days Tracker.</span>          
         </div>
-        <div className="user-profile">
-          <img
-            src="https://via.placeholder.com/80" // Placeholder user logo, replace with dynamic
-            alt="User Logo"
-            className="user-logo"
-          />
-          <span className="username">Your Name</span>
-        </div>
-      </div>
 
-      <div className="services-section">
-        <h2>Services</h2>
-        <ul className="services-list">
-          <li className="service-item" onClick={() => navigate('/gamam150')}>150 days : Cracking the GAMAM Technical Interview</li>
-          <li className="service-item" onClick={() => window.location.href = '/service2'}>Service 2</li>
-          <li className="service-item" onClick={() => window.location.href = '/service3'}>Service 3</li>
-        </ul>
-      </div>
+        <div className="home-row" onClick={() => navigate('coding')}>
+          <span className="home-item-no">1</span>
+          <span className="home-item-url">GAMAM 150 days Tracker.</span>          
+        </div>
+
+        <div className="home-row" onClick={() => navigate('system-design')}>
+          <span className="home-item-no">1</span>
+          <span className="home-item-url">GAMAM 150 days Tracker.</span>          
+        </div>
+
+        <div className="home-row" onClick={() => navigate('object-oriented-design')}>
+          <span className="home-item-no">1</span>
+          <span className="home-item-url">GAMAM 150 days Tracker.</span>          
+        </div>
+
+        <div className="home-row" onClick={() => navigate('schema-design')}>
+          <span className="home-item-no">1</span>
+          <span className="home-item-url">GAMAM 150 days Tracker.</span>          
+        </div>
+
+        <div className="home-row" onClick={() => navigate('api-design')}>
+          <span className="home-item-no">1</span>
+          <span className="home-item-url">GAMAM 150 days Tracker.</span>          
+        </div>
+
+        <div className="home-row" onClick={() => navigate('behavioral')}>
+          <span className="home-item-no">1</span>
+          <span className="home-item-url">GAMAM 150 days Tracker.</span>          
+        </div>
     </div>
   );
 }

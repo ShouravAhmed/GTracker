@@ -8,17 +8,101 @@ function Gamam150() {
 
     const [codingProblems, setCodingProblems] = useState({});
     const [problemStatusToggle, setProblemStatusToggle] = useState(false);
+
+    const [isCodingChecked, setIsCodingChecked] = useState(true);
+    const [isSystemDesignChecked, setIsSystemDesignChecked] = useState(true);
+    const [isObjectOrientedDesignChecked, setIsObjectOrientedDesignChecked] = useState(true);
+    const [isSchemaDesignChecked, setIsSchemaDesignChecked] = useState(true);
+    const [isApiDesignChecked, setIsApiDesignChecked] = useState(true);
+    const [isBehavioralChecked, setIsBehavioralChecked] = useState(true);
     
+
+    useEffect(() => {
+      fetchCodingProblems();
+    }, [isCodingChecked, isSystemDesignChecked, isObjectOrientedDesignChecked, isSchemaDesignChecked, isApiDesignChecked, isBehavioralChecked]);
+
     const fetchCodingProblems = () => {
         const data = {};
         
-        for (var item of gamamJson.Coding) {
-            if (!('day' in item)) continue;
-            item['type'] = 'Coding';
-
-            if (!(item.day in data)) data[item.day] = [];
-            data[item.day].push(item);
+        if(isCodingChecked) {
+          for (var item of gamamJson.Coding) {
+              if (!('day' in item)) {
+                continue;
+              }
+              item['type'] = 'Coding';
+  
+              if (!(item.day in data)) {
+                data[item.day] = [];
+              }
+              data[item.day].push(item);
+          }
         }
+        if(isSystemDesignChecked) {
+          for (var item of gamamJson.SystemDesign) {
+            if (!('day' in item)) {
+              continue;
+            }
+            item['type'] = 'System Design';
+
+            if (!(item.day in data)) {
+              data[item.day] = [];
+            }
+            data[item.day].push(item);
+          }
+        }
+        if(isObjectOrientedDesignChecked) {
+          for (var item of gamamJson.ObjectOrientedDesign) {
+            if (!('day' in item)) {
+              continue;
+            }
+            item['type'] = 'Object Oriented Design';
+
+            if (!(item.day in data)) {
+              data[item.day] = [];
+            }
+            data[item.day].push(item);
+          }
+        }
+        if(isSchemaDesignChecked) {
+          for (var item of gamamJson.SchemaDesign) {
+            if (!('day' in item)) {
+              continue;
+            }
+            item['type'] = 'Schema Design';
+
+            if (!(item.day in data)) {
+              data[item.day] = [];
+            }
+            data[item.day].push(item);
+          }
+        }
+        if(isApiDesignChecked) {
+          for (var item of gamamJson.APIDesign) {
+            if (!('day' in item)) {
+              continue;
+            }
+            item['type'] = 'API Design';
+
+            if (!(item.day in data)) {
+              data[item.day] = [];
+            }
+            data[item.day].push(item);
+          }
+        }
+        if(isBehavioralChecked) {
+          for (var item of gamamJson.Behavioral) {
+            if (!('day' in item)) {
+              continue;
+            }
+            item['type'] = 'Behavioral';
+
+            if (!(item.day in data)) {
+              data[item.day] = [];
+            }
+            data[item.day].push(item);
+          }
+        }
+
         setCodingProblems(data);
     };
     
@@ -29,17 +113,19 @@ function Gamam150() {
     const isDayCompleted = (day) => {
       const problems = codingProblems[day];
       
-      var cnt = 0;
+      let cnt = 0;
       for(const problem of problems) {
         const status = localStorage.getItem(problem.name);
-        if(status === 'true') cnt += 1;
+        if(status === 'true') {
+          cnt += 1;
+        }
       }
       return cnt === problems.length;
     }
 
     const isProblemSolved = (problemName) => {
       const status = localStorage.getItem(problemName);
-      return (status === 'true' ? true : false);
+      return (status === 'true');
     }
 
     const updateProblemStatus = (problemName) => {
@@ -72,6 +158,63 @@ function Gamam150() {
           </div>
         </div>
 
+        <div className="checkbox-row">
+          <div className="checkbox-item">
+            <input
+              type="checkbox"
+              id="coding"
+              checked={isCodingChecked}
+              onChange={() => setIsCodingChecked(!isCodingChecked)}
+            />
+            <label htmlFor="coding">Coding</label>
+          </div>
+          <div className="checkbox-item">
+            <input
+              type="checkbox"
+              id="system-design"
+              checked={isSystemDesignChecked}
+              onChange={() => setIsSystemDesignChecked(!isSystemDesignChecked)}
+            />
+            <label htmlFor="system-design">System Design</label>
+          </div>
+          <div className="checkbox-item">
+            <input
+              type="checkbox"
+              id="object-oriented-design"
+              checked={isObjectOrientedDesignChecked}
+              onChange={() => setIsObjectOrientedDesignChecked(!isObjectOrientedDesignChecked)}
+            />
+            <label htmlFor="object-oriented-design">Object Oriented Design</label>
+          </div>
+          <div className="checkbox-item">
+            <input
+              type="checkbox"
+              id="schema-design"
+              checked={isSchemaDesignChecked}
+              onChange={() => setIsSchemaDesignChecked(!isSchemaDesignChecked)}
+            />
+            <label htmlFor="schema-design">Schema Design</label>
+          </div>
+          <div className="checkbox-item">
+            <input
+              type="checkbox"
+              id="api-design"
+              checked={isApiDesignChecked}
+              onChange={() => setIsApiDesignChecked(!isApiDesignChecked)}
+            />
+            <label htmlFor="api-design">API Design</label>
+          </div>
+          <div className="checkbox-item">
+            <input
+              type="checkbox"
+              id="behavioral"
+              checked={isBehavioralChecked}
+              onChange={() => setIsBehavioralChecked(!isBehavioralChecked)}
+            />
+            <label htmlFor="behavioral">Behavioral</label>
+          </div>
+        </div>
+
         <div className="day-list">
         {Object.entries(codingProblems).map(([day, problems]) => (
           <div className="problem-list">
@@ -83,9 +226,14 @@ function Gamam150() {
             </div>
             {problems.map((problem, problemNo) => (
                 <div className="problem-row">
-                  <span className="problem-no">{problemNo}</span>
+                  <span className="problem-no">{problemNo + 1}</span>
                   <a className="problem-url" href={problem.url} target="_blank" rel="noopener noreferrer">{problem.name}</a>
-                  <span className={`problem-difficulty ${problem.difficulty === '(Easy)' ? "easy" : (problem.difficulty === '(Medium)' ? 'medium' : 'hard')}`}>{problem.difficulty}</span>
+                  
+                  <div className="problem-difficulty">
+                    <span>{problem.type}</span>
+                    {problem.difficulty && <span className={`${problem.difficulty === '(Easy)' ? "problem-difficulty-easy" : (problem.difficulty === '(Medium)' ? 'problem-difficulty-medium' : 'problem-difficulty-hard')}`}>{problem.difficulty}</span>}
+                  </div>
+
                   <span className={`problem-status ${isProblemSolved(problem.name) ? "problem-solved" : "problem-unsolved"}`} 
                     onClick={() => updateProblemStatus(problem.name)}>
                     {isProblemSolved(problem.name) ? "Solved" : "Unsolved"}
