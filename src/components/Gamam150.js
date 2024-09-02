@@ -19,13 +19,13 @@ function Gamam150() {
 
     useEffect(() => {
       fetchCodingProblems();
-    }, [isCodingChecked, isSystemDesignChecked, isObjectOrientedDesignChecked, isSchemaDesignChecked, isApiDesignChecked, isBehavioralChecked]);
+    }, [isCodingChecked, isSystemDesignChecked, isObjectOrientedDesignChecked, isSchemaDesignChecked, isApiDesignChecked, isBehavioralChecked, fetchCodingProblems]);
 
     const fetchCodingProblems = () => {
         const data = {};
         
         if(isCodingChecked) {
-          for (var item of gamamJson.Coding) {
+          for (const item of gamamJson.Coding) {
               if (!('day' in item)) {
                 continue;
               }
@@ -38,7 +38,7 @@ function Gamam150() {
           }
         }
         if(isSystemDesignChecked) {
-          for (var item of gamamJson.SystemDesign) {
+          for (const item of gamamJson.SystemDesign) {
             if (!('day' in item)) {
               continue;
             }
@@ -51,7 +51,7 @@ function Gamam150() {
           }
         }
         if(isObjectOrientedDesignChecked) {
-          for (var item of gamamJson.ObjectOrientedDesign) {
+          for (const item of gamamJson.ObjectOrientedDesign) {
             if (!('day' in item)) {
               continue;
             }
@@ -64,7 +64,7 @@ function Gamam150() {
           }
         }
         if(isSchemaDesignChecked) {
-          for (var item of gamamJson.SchemaDesign) {
+          for (const item of gamamJson.SchemaDesign) {
             if (!('day' in item)) {
               continue;
             }
@@ -77,7 +77,7 @@ function Gamam150() {
           }
         }
         if(isApiDesignChecked) {
-          for (var item of gamamJson.APIDesign) {
+          for (const item of gamamJson.APIDesign) {
             if (!('day' in item)) {
               continue;
             }
@@ -90,7 +90,7 @@ function Gamam150() {
           }
         }
         if(isBehavioralChecked) {
-          for (var item of gamamJson.Behavioral) {
+          for (const item of gamamJson.Behavioral) {
             if (!('day' in item)) {
               continue;
             }
@@ -108,7 +108,7 @@ function Gamam150() {
     
     useEffect(() => {
         fetchCodingProblems();
-    }, []);
+    }, [fetchCodingProblems]);
 
     const isDayCompleted = (day) => {
       const problems = codingProblems[day];
