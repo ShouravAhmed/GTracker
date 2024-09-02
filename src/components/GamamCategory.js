@@ -9,9 +9,9 @@ function GamamCategory({ categoryName }) {
     const [problemsList, setProblemsList] = useState([]);
     const [problemStatusToggle, setProblemStatusToggle] = useState(false);    
 
-    const fetchCodingProblems = () => {
+    const fetchCodingProblems = useCallback(() => {
         setProblemsList(gamamJson[categoryName]);
-    };
+    },[]};
     
     useEffect(() => {
         fetchCodingProblems();
