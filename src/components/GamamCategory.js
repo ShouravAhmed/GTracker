@@ -15,7 +15,7 @@ function GamamCategory({ categoryName }) {
     
     useEffect(() => {
         fetchCodingProblems();
-    }, []);
+    }, [fetchCodingProblems]);
 
 
     const isProblemSolved = (problemName) => {
