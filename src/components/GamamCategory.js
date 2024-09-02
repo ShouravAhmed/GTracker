@@ -1,6 +1,6 @@
 import "../assets/styles/Gamam150.css";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 
 import gamamJson from "../assets/json/gamam150.json";
 
