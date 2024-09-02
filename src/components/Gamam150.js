@@ -17,98 +17,88 @@ function Gamam150() {
     const [isBehavioralChecked, setIsBehavioralChecked] = useState(true);
     
 
-    useEffect(() => {
-      fetchCodingProblems();
-    }, [isCodingChecked, isSystemDesignChecked, isObjectOrientedDesignChecked, isSchemaDesignChecked, isApiDesignChecked, isBehavioralChecked, fetchCodingProblems]);
-
-    const fetchCodingProblems = () => {
+     // Use useCallback to memoize fetchCodingProblems function
+    const fetchCodingProblems = useCallback(() => {
         const data = {};
         
-        if(isCodingChecked) {
-          for (const item of gamamJson.Coding) {
-              if (!('day' in item)) {
-                continue;
-              }
-              item['type'] = 'Coding';
-  
-              if (!(item.day in data)) {
-                data[item.day] = [];
-              }
-              data[item.day].push(item);
-          }
+        if (isCodingChecked) {
+            for (const item of gamamJson.Coding) {
+                if (!("day" in item)) continue;
+                item["type"] = "Coding";
+                if (!(item.day in data)) data[item.day] = [];
+                data[item.day].push(item);
+            }
         }
-        if(isSystemDesignChecked) {
-          for (const item of gamamJson.SystemDesign) {
-            if (!('day' in item)) {
-              continue;
+        
+        if (isSystemDesignChecked) {
+            for (const item of gamamJson.SystemDesign) {
+                if (!("day" in item)) continue;
+                item["type"] = "System Design";
+                if (!(item.day in data)) data[item.day] = [];
+                data[item.day].push(item);
             }
-            item['type'] = 'System Design';
-
-            if (!(item.day in data)) {
-              data[item.day] = [];
-            }
-            data[item.day].push(item);
-          }
         }
-        if(isObjectOrientedDesignChecked) {
-          for (const item of gamamJson.ObjectOrientedDesign) {
-            if (!('day' in item)) {
-              continue;
-            }
-            item['type'] = 'Object Oriented Design';
 
-            if (!(item.day in data)) {
-              data[item.day] = [];
+        if (isObjectOrientedDesignChecked) {
+            for (const item of gamamJson.ObjectOrientedDesign) {
+                if (!("day" in item)) continue;
+                item["type"] = "Object Oriented Design";
+                if (!(item.day in data)) data[item.day] = [];
+                data[item.day].push(item);
             }
-            data[item.day].push(item);
-          }
         }
-        if(isSchemaDesignChecked) {
-          for (const item of gamamJson.SchemaDesign) {
-            if (!('day' in item)) {
-              continue;
-            }
-            item['type'] = 'Schema Design';
 
-            if (!(item.day in data)) {
-              data[item.day] = [];
+        if (isSchemaDesignChecked) {
+            for (const item of gamamJson.SchemaDesign) {
+                if (!("day" in item)) continue;
+                item["type"] = "Schema Design";
+                if (!(item.day in data)) data[item.day] = [];
+                data[item.day].push(item);
             }
-            data[item.day].push(item);
-          }
         }
-        if(isApiDesignChecked) {
-          for (const item of gamamJson.APIDesign) {
-            if (!('day' in item)) {
-              continue;
-            }
-            item['type'] = 'API Design';
 
-            if (!(item.day in data)) {
-              data[item.day] = [];
+        if (isApiDesignChecked) {
+            for (const item of gamamJson.APIDesign) {
+                if (!("day" in item)) continue;
+                item["type"] = "API Design";
+                if (!(item.day in data)) data[item.day] = [];
+                data[item.day].push(item);
             }
-            data[item.day].push(item);
-          }
         }
-        if(isBehavioralChecked) {
-          for (const item of gamamJson.Behavioral) {
-            if (!('day' in item)) {
-              continue;
-            }
-            item['type'] = 'Behavioral';
 
-            if (!(item.day in data)) {
-              data[item.day] = [];
+        if (isBehavioralChecked) {
+            for (const item of gamamJson.Behavioral) {
+                if (!("day" in item)) continue;
+                item["type"] = "Behavioral";
+                if (!(item.day in data)) data[item.day] = [];
+                data[item.day].push(item);
             }
-            data[item.day].push(item);
-          }
         }
 
         setCodingProblems(data);
-    };
-    
+    }, [
+        isCodingChecked,
+        isSystemDesignChecked,
+        isObjectOrientedDesignChecked,
+        isSchemaDesignChecked,
+        isApiDesignChecked,
+        isBehavioralChecked,
+    ]);
+
+    // Run fetchCodingProblems whenever the dependencies change
     useEffect(() => {
         fetchCodingProblems();
     }, [fetchCodingProblems]);
+
+    const isDayCompleted = (day) => {
+        const problems = codingProblems[day];
+        let cnt = 0;
+        for (const problem of problems) {
+            const status = localStorage.getItem(problem.name);
+            if (status === "true") cnt += 1;
+        }
+        return cnt === problems.length;
+    };
 
     const isDayCompleted = (day) => {
       const problems = codingProblems[day];
