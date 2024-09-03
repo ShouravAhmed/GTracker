@@ -30,7 +30,7 @@ function GamamCategory({ categoryName }) {
       localStorage.setItem(problemName, newStatus);
       setProblemStatusToggle(!problemStatusToggle);
     };
-    const totalSolved = Object.keys(localStorage).filter(key => localStorage.getItem(key) === 'true').length;
+    const totalSolved = problemsList.filter(problem => localStorage.getItem(problem.name) === 'true').length;
 
   return (
     <div className="gamam-tracker">
