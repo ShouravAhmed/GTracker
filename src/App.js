@@ -4,6 +4,7 @@ import Home from './components/Home';
 // import NotFound from './components/NotFound';
 import Gamam150 from './components/Gamam150';
 import GamamCategory from './components/GamamCategory';
+import NotFound from './components/NotFound';
 
 function App() {
   return (

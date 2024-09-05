@@ -3,8 +3,10 @@ import "../assets/styles/Gamam150.css";
 import React, { useState, useEffect, useCallback } from "react";
 
 import gamamJson from "../assets/json/gamam150.json";
+import { useNavigate } from "react-router-dom";
 
 function GamamCategory({ categoryName }) {
+  const navigate = useNavigate();
 
     const [problemsList, setProblemsList] = useState([]);
     const [problemStatusToggle, setProblemStatusToggle] = useState(false);    
@@ -34,6 +36,7 @@ function GamamCategory({ categoryName }) {
 
   return (
     <div className="gamam-tracker">
+        <span  style={{'fontSize': "20px", }} onClick={() => navigate('/')}><i class="fa fa-home" aria-hidden="true"></i></span>
         <h1 className="title">{categoryName}</h1>
       
         <div className="summary-row">

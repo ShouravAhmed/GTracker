@@ -3,8 +3,10 @@ import "../assets/styles/Gamam150.css";
 import React, { useState, useEffect, useCallback } from "react";
 
 import gamamJson from "../assets/json/gamam150.json";
+import { useNavigate } from "react-router-dom";
 
 function Gamam150() {
+  const navigate = useNavigate();
 
     const [codingProblems, setCodingProblems] = useState({});
     const [problemStatusToggle, setProblemStatusToggle] = useState(false);
@@ -23,54 +25,78 @@ function Gamam150() {
         
         if (isCodingChecked) {
             for (const item of gamamJson.Coding) {
-                if (!("day" in item)) continue;
+                if (!("day" in item)) {
+                  continue;
+                }
                 item["type"] = "Coding";
-                if (!(item.day in data)) data[item.day] = [];
+                if (!(item.day in data)) {
+                  data[item.day] = [];
+                }
                 data[item.day].push(item);
             }
         }
         
         if (isSystemDesignChecked) {
             for (const item of gamamJson.SystemDesign) {
-                if (!("day" in item)) continue;
+                if (!("day" in item)) {
+                  continue;
+                }
                 item["type"] = "System Design";
-                if (!(item.day in data)) data[item.day] = [];
+                if (!(item.day in data)) {
+                  data[item.day] = [];
+                }
                 data[item.day].push(item);
             }
         }
 
         if (isObjectOrientedDesignChecked) {
             for (const item of gamamJson.ObjectOrientedDesign) {
-                if (!("day" in item)) continue;
+                if (!("day" in item)) {
+                  continue;
+                }
                 item["type"] = "Object Oriented Design";
-                if (!(item.day in data)) data[item.day] = [];
+                if (!(item.day in data)) {
+                  data[item.day] = [];
+                }
                 data[item.day].push(item);
             }
         }
 
         if (isSchemaDesignChecked) {
             for (const item of gamamJson.SchemaDesign) {
-                if (!("day" in item)) continue;
+                if (!("day" in item)) {
+                  continue;
+                }
                 item["type"] = "Schema Design";
-                if (!(item.day in data)) data[item.day] = [];
+                if (!(item.day in data)) {
+                  data[item.day] = [];
+                }
                 data[item.day].push(item);
             }
         }
 
         if (isApiDesignChecked) {
             for (const item of gamamJson.APIDesign) {
-                if (!("day" in item)) continue;
+                if (!("day" in item)) {
+                  continue;
+                }
                 item["type"] = "API Design";
-                if (!(item.day in data)) data[item.day] = [];
+                if (!(item.day in data)) {
+                  data[item.day] = [];
+                }
                 data[item.day].push(item);
             }
         }
 
         if (isBehavioralChecked) {
             for (const item of gamamJson.Behavioral) {
-                if (!("day" in item)) continue;
+                if (!("day" in item)) {
+                  continue;
+                }
                 item["type"] = "Behavioral";
-                if (!(item.day in data)) data[item.day] = [];
+                if (!(item.day in data)) {
+                  data[item.day] = [];
+                }
                 data[item.day].push(item);
             }
         }
@@ -95,7 +121,9 @@ function Gamam150() {
         let cnt = 0;
         for (const problem of problems) {
             const status = localStorage.getItem(problem.name);
-            if (status === "true") cnt += 1;
+            if (status === "true") {
+              cnt += 1;
+            }
         }
         return cnt === problems.length;
     };
@@ -124,6 +152,7 @@ function Gamam150() {
 
   return (
     <div className="gamam-tracker">
+        <span style={{'fontSize': "20px", }} onClick={() => navigate('/')}><i class="fa fa-home" aria-hidden="true"></i></span>
         <h1 className="title">GAMAM 150 Day Tracker</h1>
       
         <div className="summary-row">
