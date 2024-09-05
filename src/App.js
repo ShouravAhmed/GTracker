@@ -20,7 +20,7 @@ function App() {
           <Route path='/schema-design' element={<GamamCategory categoryName="SchemaDesign" />} exact />
           <Route path='/api-design' element={<GamamCategory categoryName="APIDesign" />} exact />
           <Route path='/behavioral' element={<GamamCategory categoryName="Behavioral" />} exact />
-          {/* <Route path='*' element={<NotFound/>}/> */}
+          <Route path='*' element={<NotFound/>}/>
         </Routes>
       </Router>
     </div>
