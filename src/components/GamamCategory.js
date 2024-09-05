@@ -36,7 +36,7 @@ function GamamCategory({ categoryName }) {
 
   return (
     <div className="gamam-tracker">
-        <span  style={{'fontSize': "20px", }} onClick={() => navigate('/')}><i class="fa fa-home" aria-hidden="true"></i></span>
+        <span  style={{'fontSize': "20px", 'color': 'seagreen'}} onClick={() => navigate('/')}><i class="fa fa-home" aria-hidden="true"></i></span>
         <h1 className="title">{categoryName}</h1>
       
         <div className="summary-row">
