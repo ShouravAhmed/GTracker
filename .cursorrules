@@ -1,0 +1,81 @@
+# Next.js 14 App Router Project Rules
+
+## TypeScript
+- Always use TypeScript with strict type checking
+- Define proper interfaces/types for all props, state, and data structures
+- Use type inference where appropriate, but be explicit for public APIs
+- Avoid `any` type - use `unknown` or proper types instead
+- Enable strict mode in tsconfig.json
+
+## Next.js 14 App Router
+- Use the App Router (`app/` directory) for all routing
+- Use Server Components by default, mark Client Components with `'use client'` directive
+- Use `next/link` for navigation instead of `react-router-dom`
+- Use `next/navigation` hooks (`useRouter`, `usePathname`) for client-side navigation
+- Place shared layouts in `app/layout.tsx`
+- Use route groups and parallel routes when appropriate
+- Leverage Server Actions for form submissions and mutations
+- Use `generateStaticParams` for dynamic routes when possible
+
+## Tailwind CSS
+- Follow mobile-first design principles - start with base mobile styles, then add `md:`, `lg:`, `xl:` breakpoints
+- Use Tailwind utility classes instead of custom CSS files
+- Keep custom CSS minimal - only for complex animations or when Tailwind utilities are insufficient
+- Use Tailwind's dark mode classes (`dark:`) for dark mode support
+- Ensure high contrast for accessibility (WCAG AA minimum)
+- Use semantic color tokens from Tailwind's color palette
+- Prefer Tailwind's spacing scale (p-4, m-2, gap-4, etc.)
+
+## Component Structure
+- Place all reusable components in `@/components` directory (aliased from `src/components` or `components`)
+- Use modular, single-responsibility components
+- Export components as named exports when possible
+- Use TypeScript interfaces for component props
+- Keep components small and focused - extract complex logic into custom hooks or utilities
+
+## Supabase Integration
+- All Supabase calls must be handled via Server Actions or a dedicated client utility
+- Create a `@/lib/supabase` directory for Supabase client utilities
+- Use Server Actions for mutations and data fetching when possible
+- Create a client-side Supabase utility for client components that need real-time features
+- Never expose Supabase keys in client-side code - use environment variables
+- Use TypeScript types generated from Supabase schema when available
+
+## UI/UX Guidelines
+- Design with mobile-first approach - ensure all features work on mobile devices
+- Keep UI clean, modern, and minimal
+- Support Dark Mode using Tailwind's dark mode classes
+- Ensure high contrast for text and interactive elements
+- Use Lucide React icons consistently throughout the application
+- Maintain consistent spacing and typography using Tailwind's design tokens
+- Use semantic HTML elements for accessibility
+
+## File Organization
+- `app/` - Next.js App Router pages and layouts
+- `components/` - Reusable React components
+- `lib/` - Utility functions, Supabase clients, helpers
+- `types/` - TypeScript type definitions
+- `public/` - Static assets
+- `styles/` - Global styles (minimal, prefer Tailwind)
+
+## Code Quality
+- Use ESLint and Prettier for code formatting
+- Follow Next.js and React best practices
+- Write self-documenting code with clear variable and function names
+- Add JSDoc comments for complex functions and components
+- Handle errors gracefully with proper error boundaries and try-catch blocks
+
+## Performance
+- Use Next.js Image component for images
+- Implement proper loading states and Suspense boundaries
+- Use dynamic imports for code splitting when appropriate
+- Optimize bundle size by avoiding unnecessary dependencies
+- Leverage Next.js caching strategies (revalidate, cache tags)
+
+## Accessibility
+- Use semantic HTML elements
+- Ensure proper ARIA labels where needed
+- Maintain keyboard navigation support
+- Ensure color contrast meets WCAG AA standards
+- Test with screen readers when possible
+
