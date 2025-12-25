@@ -5,6 +5,10 @@
 :root {
   --background: #ffffff;
   --foreground: #333333;
+  --neumorphic-bg-light: #f0f0f0;
+  --neumorphic-bg-dark: #2a2a3a;
+  --neumorphic-shadow-light: #ffffff;
+  --neumorphic-shadow-dark: #000000;
 }
 
 .dark {
@@ -25,5 +29,188 @@ body {
 code {
   font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
     monospace;
+}
+
+/* Neumorphic Styles */
+.neumorphic-icon {
+  @apply w-8 h-8 rounded-full flex items-center justify-center transition-all duration-300;
+  /* Light mode */
+  background: #f0f0f0;
+  box-shadow: 
+    inset 3px 3px 6px rgba(0, 0, 0, 0.1),
+    inset -3px -3px 6px rgba(255, 255, 255, 0.9);
+  color: #999;
+}
+
+.dark .neumorphic-icon {
+  /* Dark mode */
+  background: #2a2a3a;
+  box-shadow: 
+    inset 3px 3px 6px rgba(0, 0, 0, 0.3),
+    inset -3px -3px 6px rgba(255, 255, 255, 0.05);
+  color: #666;
+}
+
+.neumorphic-icon-active {
+  /* Light mode active */
+  box-shadow: 
+    3px 3px 6px rgba(0, 0, 0, 0.1),
+    -3px -3px 6px rgba(255, 255, 255, 0.9);
+  color: #555;
+}
+
+.dark .neumorphic-icon-active {
+  /* Dark mode active */
+  box-shadow: 
+    3px 3px 6px rgba(0, 0, 0, 0.3),
+    -3px -3px 6px rgba(255, 255, 255, 0.05);
+  color: #aaa;
+}
+
+.neumorphic-toggle {
+  /* Light mode */
+  background: #f0f0f0;
+}
+
+.dark .neumorphic-toggle {
+  /* Dark mode */
+  background: #2a2a3a;
+}
+
+.neumorphic-toggle-track {
+  /* Light mode */
+  background: #f0f0f0;
+  box-shadow: 
+    inset 4px 4px 8px rgba(0, 0, 0, 0.15),
+    inset -4px -4px 8px rgba(255, 255, 255, 0.9);
+}
+
+.dark .neumorphic-toggle-track {
+  /* Dark mode */
+  background: #2a2a3a;
+  box-shadow: 
+    inset 4px 4px 8px rgba(0, 0, 0, 0.4),
+    inset -4px -4px 8px rgba(255, 255, 255, 0.05);
+}
+
+.neumorphic-toggle-thumb {
+  /* Light mode */
+  background: linear-gradient(135deg, #ffffff 0%, #f5f5f5 100%);
+  box-shadow: 
+    3px 3px 6px rgba(0, 0, 0, 0.2),
+    -2px -2px 4px rgba(255, 255, 255, 0.9);
+}
+
+.dark .neumorphic-toggle-thumb {
+  /* Dark mode */
+  background: linear-gradient(135deg, #3a3a4a 0%, #2a2a3a 100%);
+  box-shadow: 
+    3px 3px 6px rgba(0, 0, 0, 0.4),
+    -2px -2px 4px rgba(255, 255, 255, 0.05);
+}
+
+.neumorphic-toggle-icon {
+  /* Light mode - debossed icon inside toggle */
+  color: #999;
+  transition: color 0.3s ease;
+}
+
+.dark .neumorphic-toggle-icon {
+  /* Dark mode - debossed icon inside toggle */
+  color: #666;
+  transition: color 0.3s ease;
+}
+
+.neumorphic-button {
+  /* Light mode */
+  background: #f0f0f0;
+  color: #333;
+  box-shadow: 
+    4px 4px 8px rgba(0, 0, 0, 0.15),
+    -4px -4px 8px rgba(255, 255, 255, 0.9);
+}
+
+.dark .neumorphic-button {
+  /* Dark mode */
+  background: #2a2a3a;
+  color: #f5f5f5;
+  box-shadow: 
+    4px 4px 8px rgba(0, 0, 0, 0.4),
+    -4px -4px 8px rgba(255, 255, 255, 0.05);
+}
+
+.neumorphic-button:hover {
+  /* Light mode hover */
+  box-shadow: 
+    2px 2px 4px rgba(0, 0, 0, 0.15),
+    -2px -2px 4px rgba(255, 255, 255, 0.9);
+}
+
+.dark .neumorphic-button:hover {
+  /* Dark mode hover */
+  box-shadow: 
+    2px 2px 4px rgba(0, 0, 0, 0.4),
+    -2px -2px 4px rgba(255, 255, 255, 0.05);
+}
+
+.neumorphic-button:active {
+  /* Light mode active */
+  box-shadow: 
+    inset 2px 2px 4px rgba(0, 0, 0, 0.15),
+    inset -2px -2px 4px rgba(255, 255, 255, 0.9);
+}
+
+.dark .neumorphic-button:active {
+  /* Dark mode active */
+  box-shadow: 
+    inset 2px 2px 4px rgba(0, 0, 0, 0.4),
+    inset -2px -2px 4px rgba(255, 255, 255, 0.05);
+}
+
+.neumorphic-button-danger {
+  /* Light mode danger */
+  background: #f0f0f0;
+  color: #dc2626;
+}
+
+.dark .neumorphic-button-danger {
+  /* Dark mode danger */
+  background: #2a2a3a;
+  color: #ef4444;
+}
+
+.neumorphic-text {
+  /* Light mode text */
+  color: #555;
+  text-shadow: 
+    1px 1px 2px rgba(255, 255, 255, 0.8),
+    -1px -1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.dark .neumorphic-text {
+  /* Dark mode text */
+  color: #ccc;
+  text-shadow: 
+    1px 1px 2px rgba(0, 0, 0, 0.5),
+    -1px -1px 2px rgba(255, 255, 255, 0.05);
+}
+
+/* Breathing animation */
+@keyframes breathe {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.05);
+  }
+}
+
+.animate-breathe {
+  animation: breathe 2s ease-in-out infinite;
+}
+
+.animate-breathe:hover {
+  animation-play-state: paused;
+  transform: scale(1);
 }
 

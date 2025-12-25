@@ -1,10 +1,8 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import Link from 'next/link'
-import { Home as HomeIcon } from 'lucide-react'
 import gamamJson from '@/src/assets/json/gamam150.json'
-import { getProblemStatus, toggleProblemStatus } from '@/lib/localStorage'
+import { useSolves } from '@/lib/solves-client'
 import type { Problem, CategoryName } from '@/types/gamam'
 
 interface GamamCategoryProps {
@@ -12,6 +10,7 @@ interface GamamCategoryProps {
 }
 
 export default function GamamCategory({ categoryName }: GamamCategoryProps) {
+  const { getProblemStatus, toggleProblemStatus, triggerLogin, loading: solvesLoading, isAuthenticated } = useSolves()
   const [problemsList, setProblemsList] = useState<Problem[]>([])
   const [problemStatusToggle, setProblemStatusToggle] = useState(false)
 
@@ -27,9 +26,21 @@ export default function GamamCategory({ categoryName }: GamamCategoryProps) {
     return getProblemStatus(problemName)
   }
 
-  const updateProblemStatus = (problemName: string) => {
-    toggleProblemStatus(problemName)
-    setProblemStatusToggle(!problemStatusToggle)
+  const updateProblemStatus = async (problemName: string) => {
+    if (!isAuthenticated) {
+      // Redirect to login if not authenticated
+      try {
+        await triggerLogin()
+      } catch (error) {
+        console.error('Failed to trigger login:', error)
+      }
+      return
+    }
+
+    const result = await toggleProblemStatus(problemName)
+    if (result !== null) {
+      setProblemStatusToggle(!problemStatusToggle)
+    }
   }
 
   const totalSolved = problemsList.filter(problem => getProblemStatus(problem.name)).length
@@ -45,13 +56,6 @@ export default function GamamCategory({ categoryName }: GamamCategoryProps) {
   return (
     <div className="min-h-screen bg-white dark:bg-gray-900 px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
       <div className="max-w-6xl mx-auto">
-        <Link
-          href="/"
-          className="inline-flex items-center gap-2 text-green-600 dark:text-green-400 hover:text-green-700 dark:hover:text-green-300 mb-6 text-xl"
-        >
-          <HomeIcon size={20} />
-        </Link>
-        
         <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-center text-gray-900 dark:text-white mb-6 sm:mb-10">
           {categoryName}
         </h1>
@@ -90,13 +94,14 @@ export default function GamamCategory({ categoryName }: GamamCategoryProps) {
                 </div>
                 <button
                   onClick={() => updateProblemStatus(problem.name)}
-                  className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-full text-xs sm:text-sm font-bold text-white transition-colors ${
+                  disabled={solvesLoading}
+                  className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-full text-xs sm:text-sm font-bold text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
                     isProblemSolved(problem.name)
                       ? 'bg-green-600 dark:bg-green-500 hover:bg-green-700 dark:hover:bg-green-600'
                       : 'bg-red-500 dark:bg-red-600 hover:bg-red-600 dark:hover:bg-red-700'
                   }`}
                 >
-                  {isProblemSolved(problem.name) ? 'Solved' : 'Unsolved'}
+                  {solvesLoading ? 'Loading...' : isProblemSolved(problem.name) ? 'Solved' : 'Unsolved'}
                 </button>
               </div>
             ))}
