@@ -20,7 +20,6 @@ export default function Gamam150() {
     getUserSolve,
     toggleProblemStatus,
     startProblem,
-    updateTimeWorked,
     updateFocusTime,
     updateNote,
     triggerLogin,
@@ -78,47 +77,56 @@ export default function Gamam150() {
     setCodingProblems(sortedData)
   }, [problems, isCodingChecked, isSystemDesignChecked, isObjectOrientedDesignChecked, isSchemaDesignChecked, isApiDesignChecked, isBehavioralChecked])
 
-  // Calculate elapsed times for problems that have been started
+  // Calculate elapsed times for problems that are in progress
+  // Time calculation:
+  // - When in progress: now - started_at
+  // - When solved: solved_at - started_at
   useEffect(() => {
-    const interval = setInterval(() => {
+    // Recalculate elapsed times immediately when solves change or tab becomes visible
+    const recalculateTimes = () => {
       const now = Date.now()
       const newElapsedTimes: Record<string, number> = {}
       
       for (const [problemId, userSolve] of Object.entries(solves)) {
-        if (userSolve.started_at && !userSolve.solved) {
-          const startTime = new Date(userSolve.started_at).getTime()
-          const elapsed = Math.floor((now - startTime) / 1000)
-          newElapsedTimes[problemId] = elapsed
+        if (userSolve.started_at) {
+          if (!userSolve.solved && userSolve.started_at) {
+            // In progress: calculate elapsed time from started_at to now
+            const startTime = new Date(userSolve.started_at).getTime()
+            const elapsed = Math.floor((now - startTime) / 1000)
+            newElapsedTimes[problemId] = elapsed
+          } else if (userSolve.solved && userSolve.solved_at && userSolve.started_at) {
+            // Solved: calculate time from started_at to solved_at
+            const startTime = new Date(userSolve.started_at).getTime()
+            const solvedTime = new Date(userSolve.solved_at).getTime()
+            const elapsed = Math.floor((solvedTime - startTime) / 1000)
+            newElapsedTimes[problemId] = elapsed
+          }
         }
       }
       
       setElapsedTimes(newElapsedTimes)
-    }, 1000) // Update every second for real-time display
+    }
 
-    return () => clearInterval(interval)
-  }, [solves])
+    // Recalculate immediately
+    recalculateTimes()
 
-  // Time tracking effect - batch updates every 30 seconds for problems in progress
-  useEffect(() => {
-    const interval = setInterval(() => {
-      const now = Date.now()
-      for (const [problemId, userSolve] of Object.entries(solves)) {
-        if (userSolve.started_at && !userSolve.solved) {
-          const startTime = new Date(userSolve.started_at).getTime()
-          const totalElapsed = Math.floor((now - startTime) / 1000)
-          const currentTimeWorked = userSolve.total_time_worked || 0
-          
-          // Only update if there's significant new time to add (at least 30 seconds)
-          if (totalElapsed > currentTimeWorked + 30) {
-            const additionalTime = totalElapsed - currentTimeWorked
-            updateTimeWorked(problemId, additionalTime)
-          }
-        }
+    // Set up interval for continuous updates
+    const interval = setInterval(recalculateTimes, 1000) // Update every second for real-time display
+
+    // Handle visibility change to recalculate when tab becomes visible again
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        // Tab became visible, recalculate times immediately
+        recalculateTimes()
       }
-    }, 30000) // Check every 30 seconds
+    }
+    document.addEventListener('visibilitychange', handleVisibilityChange)
 
-    return () => clearInterval(interval)
-  }, [solves, updateTimeWorked])
+    return () => {
+      clearInterval(interval)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [solves])
 
   const isDayCompleted = (day: string): boolean => {
     const problems = codingProblems[day]
@@ -357,18 +365,26 @@ export default function Gamam150() {
                   const isInProgress = hasStarted && !isSolved
                   
                   // Calculate solving time
+                  // When in progress: now - started_at
+                  // When solved: solved_at - started_at
                   let solvingTime: number = 0
-                  if (isInProgress) {
+                  if (isInProgress && userSolve?.started_at) {
                     // If in progress, show live elapsed time
                     if (elapsedTimes[problem.id] !== undefined) {
                       solvingTime = elapsedTimes[problem.id]
-                    } else if (userSolve?.started_at) {
+                    } else {
                       const startTime = new Date(userSolve.started_at).getTime()
                       solvingTime = Math.floor((Date.now() - startTime) / 1000)
                     }
-                  } else if (userSolve?.total_time_worked) {
-                    // If not in progress, show total time worked
-                    solvingTime = userSolve.total_time_worked
+                  } else if (isSolved && userSolve?.solved_at && userSolve?.started_at) {
+                    // If solved, show time from started_at to solved_at
+                    if (elapsedTimes[problem.id] !== undefined) {
+                      solvingTime = elapsedTimes[problem.id]
+                    } else {
+                      const startTime = new Date(userSolve.started_at).getTime()
+                      const solvedTime = new Date(userSolve.solved_at).getTime()
+                      solvingTime = Math.floor((solvedTime - startTime) / 1000)
+                    }
                   }
 
                   return (
@@ -393,65 +409,72 @@ export default function Gamam150() {
                           <span>{solveCount}</span>
                         </div>
                       </div>
-                      <div className="flex flex-col gap-0.5">
-                        <div className="grid grid-cols-3 gap-0.5">
-                          {(() => {
-                            const { hours, minutes, seconds: secs } = getTimeComponents(solvingTime)
-                            return (
-                              <>
-                                <div className="flex flex-col items-center justify-center px-1.5 py-1 rounded-lg bg-gray-100/50 dark:bg-gray-800/50 backdrop-blur-sm border border-gray-200/50 dark:border-gray-700/50 shadow-sm">
-                                  <span className="text-xs sm:text-sm font-semibold text-amber-800 dark:text-amber-600">
-                                    {hours}
-                                  </span>
-                                </div>
-                                <div className="flex flex-col items-center justify-center px-1.5 py-1 rounded-lg bg-gray-100/50 dark:bg-gray-800/50 backdrop-blur-sm border border-gray-200/50 dark:border-gray-700/50 shadow-sm">
-                                  <span className="text-xs sm:text-sm font-semibold text-amber-800 dark:text-amber-600">
-                                    {minutes}
-                                  </span>
-                                </div>
-                                <div className="flex flex-col items-center justify-center px-1.5 py-1 rounded-lg bg-gray-100/50 dark:bg-gray-800/50 backdrop-blur-sm border border-gray-200/50 dark:border-gray-700/50 shadow-sm">
-                                  <span className="text-xs sm:text-sm font-semibold text-amber-800 dark:text-amber-600">
-                                    {secs}
-                                  </span>
-                                </div>
-                              </>
-                            )
-                          })()}
+                      {/* Solving time column */}
+                      <div className="relative">
+                        <div className="flex flex-col gap-0.5">
+                          <div className="grid grid-cols-3 gap-0.5">
+                            {(() => {
+                              const { hours, minutes, seconds: secs } = getTimeComponents(solvingTime)
+                              return (
+                                <>
+                                  <div className="flex flex-col items-center justify-center px-1.5 py-1 rounded-lg bg-gray-100/50 dark:bg-gray-800/50 backdrop-blur-sm border border-gray-200/50 dark:border-gray-700/50 shadow-sm">
+                                    <span className="text-xs sm:text-sm font-semibold text-amber-800 dark:text-amber-600">
+                                      {String(hours).padStart(2, '0')}
+                                    </span>
+                                  </div>
+                                  <div className="flex flex-col items-center justify-center px-1.5 py-1 rounded-lg bg-gray-100/50 dark:bg-gray-800/50 backdrop-blur-sm border border-gray-200/50 dark:border-gray-700/50 shadow-sm">
+                                    <span className="text-xs sm:text-sm font-semibold text-amber-800 dark:text-amber-600">
+                                      {String(minutes).padStart(2, '0')}
+                                    </span>
+                                  </div>
+                                  <div className="flex flex-col items-center justify-center px-1.5 py-1 rounded-lg bg-gray-100/50 dark:bg-gray-800/50 backdrop-blur-sm border border-gray-200/50 dark:border-gray-700/50 shadow-sm">
+                                    <span className="text-xs sm:text-sm font-semibold text-amber-800 dark:text-amber-600">
+                                      {String(secs).padStart(2, '0')}
+                                    </span>
+                                  </div>
+                                </>
+                              )
+                            })()}
+                          </div>
+                          <span className="text-[8px] text-gray-500 dark:text-gray-400 text-center">
+                            solving time
+                          </span>
                         </div>
-                        <span className="text-[8px] text-gray-500 dark:text-gray-400 text-center">
-                          solving time
-                        </span>
                       </div>
-                      <div className="flex flex-col gap-0.5">
-                        <div className="grid grid-cols-3 gap-0.5">
-                          {(() => {
-                            const { hours, minutes, seconds: secs } = getTimeComponents(userSolve?.focus_time || 0)
-                            return (
-                              <>
-                                <div className="flex flex-col items-center justify-center px-1.5 py-1 rounded-lg bg-gray-100/50 dark:bg-gray-800/50 backdrop-blur-sm border border-gray-200/50 dark:border-gray-700/50 shadow-sm">
-                                  <span className="text-xs sm:text-sm font-semibold text-amber-800 dark:text-amber-600">
-                                    {hours}
-                                  </span>
-                                </div>
-                                <div className="flex flex-col items-center justify-center px-1.5 py-1 rounded-lg bg-gray-100/50 dark:bg-gray-800/50 backdrop-blur-sm border border-gray-200/50 dark:border-gray-700/50 shadow-sm">
-                                  <span className="text-xs sm:text-sm font-semibold text-amber-800 dark:text-amber-600">
-                                    {minutes}
-                                  </span>
-                                </div>
-                                <div className="flex flex-col items-center justify-center px-1.5 py-1 rounded-lg bg-gray-100/50 dark:bg-gray-800/50 backdrop-blur-sm border border-gray-200/50 dark:border-gray-700/50 shadow-sm">
-                                  <span className="text-xs sm:text-sm font-semibold text-amber-800 dark:text-amber-600">
-                                    {secs}
-                                  </span>
-                                </div>
-                              </>
-                            )
-                          })()}
+                      {/* Focus time column */}
+                      <div className="relative">
+                        <div className="flex flex-col gap-0.5">
+                          <div className="grid grid-cols-3 gap-0.5">
+                            {(() => {
+                              const { hours, minutes, seconds: secs } = getTimeComponents(userSolve?.focus_time || 0)
+                              return (
+                                <>
+                                  <div className="flex flex-col items-center justify-center px-1.5 py-1 rounded-lg bg-gray-100/50 dark:bg-gray-800/50 backdrop-blur-sm border border-gray-200/50 dark:border-gray-700/50 shadow-sm">
+                                    <span className="text-xs sm:text-sm font-semibold text-amber-800 dark:text-amber-600">
+                                      {String(hours).padStart(2, '0')}
+                                    </span>
+                                  </div>
+                                  <div className="flex flex-col items-center justify-center px-1.5 py-1 rounded-lg bg-gray-100/50 dark:bg-gray-800/50 backdrop-blur-sm border border-gray-200/50 dark:border-gray-700/50 shadow-sm">
+                                    <span className="text-xs sm:text-sm font-semibold text-amber-800 dark:text-amber-600">
+                                      {String(minutes).padStart(2, '0')}
+                                    </span>
+                                  </div>
+                                  <div className="flex flex-col items-center justify-center px-1.5 py-1 rounded-lg bg-gray-100/50 dark:bg-gray-800/50 backdrop-blur-sm border border-gray-200/50 dark:border-gray-700/50 shadow-sm">
+                                    <span className="text-xs sm:text-sm font-semibold text-amber-800 dark:text-amber-600">
+                                      {String(secs).padStart(2, '0')}
+                                    </span>
+                                  </div>
+                                </>
+                              )
+                            })()}
+                          </div>
+                          <span className="text-[8px] text-gray-500 dark:text-gray-400 text-center">
+                            focus time
+                          </span>
                         </div>
-                        <span className="text-[8px] text-gray-500 dark:text-gray-400 text-center">
-                          focus time
-                        </span>
                       </div>
-                      <div>
+                      {/* Type/Difficulty column */}
+                      <div className="relative">
                         {(problem.type || problem.difficulty) && (
                           <button
                             className={`px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all duration-200 backdrop-blur-md border shadow-sm ${getGlassMorphismStyles(problem.difficulty)}`}
@@ -462,51 +485,96 @@ export default function Gamam150() {
                           </button>
                         )}
                       </div>
-                      <button
-                        onClick={() => setSelectedFocusProblem(problem)}
-                        className="flex items-center gap-1 px-2 py-1 bg-purple-600 hover:bg-purple-700 text-white rounded text-xs sm:text-sm"
-                        title="Focus timer"
-                      >
-                        <Target size={14} />
-                        Focus
-                      </button>
-                      <button
-                        onClick={() => setSelectedNoteProblem(problem)}
-                        className={`flex items-center gap-1 px-2 py-1 rounded text-xs sm:text-sm ${
-                          hasNote
-                            ? 'bg-green-600 hover:bg-green-700 text-white'
-                            : 'bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300'
-                        }`}
-                        title="Edit note"
-                      >
-                        <FileText size={14} />
-                        Note
-                      </button>
-
-                      {!hasStarted ? (
+                      {/* Focus button column */}
+                      <div className="relative">
                         <button
-                          onClick={() => handleStartProblem(problem.id)}
-                          className="flex items-center gap-1 px-3 sm:px-4 py-1.5 sm:py-2 bg-red-500 hover:bg-red-600 dark:bg-red-500 dark:hover:bg-red-600 text-white rounded-full text-xs sm:text-sm font-bold transition-colors"
+                          onClick={async () => {
+                            if (!isAuthenticated) {
+                              await triggerLogin()
+                              return
+                            }
+                            setSelectedFocusProblem(problem)
+                          }}
+                          className="flex items-center gap-1 px-2 py-1 bg-purple-600 hover:bg-purple-700 text-white rounded text-xs sm:text-sm"
+                          title="Focus timer"
                         >
-                          <Play size={14} />
-                          Start
+                          <Target size={14} />
+                          Focus
                         </button>
-                      ) : isInProgress ? (
+                      </div>
+                      {/* Note button column */}
+                      <div className="relative">
                         <button
-                          onClick={() => updateProblemStatus(problem.id)}
-                          className="px-3 sm:px-4 py-1.5 sm:py-2 bg-blue-500 hover:bg-blue-600 dark:bg-blue-500 dark:hover:bg-blue-600 text-white rounded-full text-xs sm:text-sm font-bold transition-colors group animate-breathe"
+                          onClick={async () => {
+                            if (!isAuthenticated) {
+                              await triggerLogin()
+                              return
+                            }
+                            setSelectedNoteProblem(problem)
+                          }}
+                          className={`flex items-center gap-1 px-2 py-1 rounded text-xs sm:text-sm ${
+                            hasNote
+                              ? 'bg-green-600 hover:bg-green-700 text-white'
+                              : 'bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300'
+                          }`}
+                          title="Edit note"
                         >
-                          <span className="group-hover:hidden">In progress</span>
-                          <span className="hidden group-hover:inline">mark solved</span>
+                          <FileText size={14} />
+                          Note
                         </button>
-                      ) : (
-                        <button
-                          onClick={() => updateProblemStatus(problem.id)}
-                          className="px-3 sm:px-4 py-1.5 sm:py-2 rounded-full text-xs sm:text-sm font-bold text-white transition-colors bg-green-500 hover:bg-green-600 dark:bg-green-500 dark:hover:bg-green-600"
-                        >
-                          Solved
-                        </button>
-                      )}
+                      </div>
+                      {/* State button column */}
+                      <div className="relative">
+                        {solvesLoading && isAuthenticated ? (
+                          <button
+                            disabled
+                            className="px-3 sm:px-4 py-1.5 sm:py-2 rounded-full text-xs sm:text-sm font-bold text-white transition-colors bg-gray-500 dark:bg-gray-500 cursor-not-allowed"
+                          >
+                            Loading...
+                          </button>
+                        ) : !hasStarted ? (
+                          <button
+                            onClick={async () => {
+                              if (!isAuthenticated) {
+                                await triggerLogin()
+                                return
+                              }
+                              await handleStartProblem(problem.id)
+                            }}
+                            className="flex items-center gap-1 px-3 sm:px-4 py-1.5 sm:py-2 bg-red-500 hover:bg-red-600 dark:bg-red-500 dark:hover:bg-red-600 text-white rounded-full text-xs sm:text-sm font-bold transition-colors"
+                          >
+                            <Play size={14} />
+                            Start
+                          </button>
+                        ) : isInProgress ? (
+                          <button
+                            onClick={async () => {
+                              if (!isAuthenticated) {
+                                await triggerLogin()
+                                return
+                              }
+                              await updateProblemStatus(problem.id)
+                            }}
+                            className="px-3 sm:px-4 py-1.5 sm:py-2 bg-blue-500 hover:bg-blue-600 dark:bg-blue-500 dark:hover:bg-blue-600 text-white rounded-full text-xs sm:text-sm font-bold transition-colors group animate-breathe"
+                          >
+                            <span className="group-hover:hidden">In progress</span>
+                            <span className="hidden group-hover:inline">mark solved</span>
+                          </button>
+                        ) : (
+                          <button
+                            onClick={async () => {
+                              if (!isAuthenticated) {
+                                await triggerLogin()
+                                return
+                              }
+                              await updateProblemStatus(problem.id)
+                            }}
+                            className="px-3 sm:px-4 py-1.5 sm:py-2 rounded-full text-xs sm:text-sm font-bold text-white transition-colors bg-green-500 hover:bg-green-600 dark:bg-green-500 dark:hover:bg-green-600"
+                          >
+                            Solved
+                          </button>
+                        )}
+                      </div>
                     </div>
                   )
                 })}

@@ -20,7 +20,7 @@ export interface UserSolve {
   solved: boolean
   note?: string
   started_at?: string
-  total_time_worked: number
+  solved_at?: string
   focus_time: number
   created_at: string
   updated_at: string
@@ -180,14 +180,26 @@ export async function setProblemStatus(
       throw new Error('User not authenticated')
     }
 
+    const now = new Date().toISOString()
+    const updateData: any = {
+      user_id: user.id,
+      problem_id: problemId,
+      solved,
+      updated_at: now,
+    }
+
+    if (solved) {
+      // When marking as solved, set solved_at if not already set
+      updateData.solved_at = now
+    } else {
+      // When marking as not solved (in progress), clear solved_at and set started_at
+      updateData.solved_at = null
+      updateData.started_at = now
+    }
+
     const { error } = await supabase
       .from('user_solves')
-      .upsert({
-        user_id: user.id,
-        problem_id: problemId,
-        solved,
-        updated_at: new Date().toISOString(),
-      }, {
+      .upsert(updateData, {
         onConflict: 'user_id,problem_id'
       })
 
@@ -210,7 +222,12 @@ export async function setProblemStatus(
 
 /**
  * Toggle solve status for a problem
- * When marking a problem as solved, all other in-progress problems will be reset to "start" state.
+ * New state machine:
+ * - From "not started" -> "in progress" (when starting)
+ * - From "in progress" -> "solved" (when marking solved)
+ * - From "solved" -> "in progress" (when clicking solved again)
+ * Multiple problems can be in progress at once.
+ * State changes of one problem don't affect others.
  */
 export async function toggleProblemStatus(problemId: string): Promise<boolean> {
   try {
@@ -221,66 +238,54 @@ export async function toggleProblemStatus(problemId: string): Promise<boolean> {
       throw new Error('User not authenticated')
     }
 
-    // First, get current status
+    // Get current status
     const { data: existing } = await supabase
       .from('user_solves')
-      .select('solved')
+      .select('solved, started_at, solved_at')
       .eq('user_id', user.id)
       .eq('problem_id', problemId)
       .single()
 
-    const newStatus = existing ? !existing.solved : true
-
-    // If marking as solved, clear all other in-progress problems
-    if (newStatus) {
-      const { data: inProgressProblems, error: findError } = await supabase
-        .from('user_solves')
-        .select('problem_id')
-        .eq('user_id', user.id)
-        .not('started_at', 'is', null)
-        .eq('solved', false)
-        .neq('problem_id', problemId)
-
-      if (findError) {
-        console.error('Error finding in-progress problems:', findError)
-      } else if (inProgressProblems && inProgressProblems.length > 0) {
-        // Clear started_at for all other in-progress problems
-        const problemIdsToClear = inProgressProblems.map(p => p.problem_id)
-        const { error: clearError } = await supabase
-          .from('user_solves')
-          .update({ started_at: null, updated_at: new Date().toISOString() })
-          .eq('user_id', user.id)
-          .in('problem_id', problemIdsToClear)
-
-        if (clearError) {
-          console.error('Error clearing in-progress problems:', clearError)
-        }
-      }
+    const isCurrentlySolved = existing?.solved ?? false
+    const now = new Date().toISOString()
+    
+    let updateData: any = {
+      user_id: user.id,
+      problem_id: problemId,
+      updated_at: now,
     }
 
-    // Upsert with new status
+    if (isCurrentlySolved) {
+      // Currently solved -> change to in progress
+      // Clear solved_at, set started_at to now, set solved to false
+      updateData.solved = false
+      updateData.solved_at = null
+      updateData.started_at = now
+    } else {
+      // Currently in progress -> change to solved
+      // Set solved_at to now, keep started_at, set solved to true
+      updateData.solved = true
+      updateData.solved_at = now
+      // Keep started_at as is (don't clear it)
+    }
+
     const { error } = await supabase
       .from('user_solves')
-      .upsert({
-        user_id: user.id,
-        problem_id: problemId,
-        solved: newStatus,
-        updated_at: new Date().toISOString(),
-      }, {
+      .upsert(updateData, {
         onConflict: 'user_id,problem_id'
       })
 
     if (error) {
       if (error.code === 'PGRST205' || error.message?.includes('user_solves') || error.message?.includes('table')) {
         console.warn('Database table not found.')
-        return newStatus
+        return !isCurrentlySolved
       }
       console.error('Error toggling problem status:', error)
-      return newStatus
+      return !isCurrentlySolved
     }
 
     revalidatePath('/gamam-150')
-    return newStatus
+    return !isCurrentlySolved
   } catch (error: any) {
     console.error('Error in toggleProblemStatus:', error)
     return false
@@ -289,8 +294,8 @@ export async function toggleProblemStatus(problemId: string): Promise<boolean> {
 
 /**
  * Start working on a problem
- * Only one problem can be in progress at a time.
- * If another problem is in progress, it will be reset to "start" state.
+ * Multiple problems can be in progress at once.
+ * State changes of one problem don't affect others.
  */
 export async function startProblem(problemId: string): Promise<boolean> {
   try {
@@ -301,72 +306,27 @@ export async function startProblem(problemId: string): Promise<boolean> {
       throw new Error('User not authenticated')
     }
 
-    // First, find and clear any other in-progress problems
-    // We need to save their current time worked before clearing started_at
-    const { data: inProgressProblems, error: findError } = await supabase
-      .from('user_solves')
-      .select('problem_id, started_at, total_time_worked')
-      .eq('user_id', user.id)
-      .not('started_at', 'is', null)
-      .eq('solved', false)
-      .neq('problem_id', problemId)
-
-    if (findError) {
-      console.error('Error finding in-progress problems:', findError)
-    } else if (inProgressProblems && inProgressProblems.length > 0) {
-      // For each in-progress problem, calculate and save the accumulated time
-      const now = Date.now()
-      for (const problem of inProgressProblems) {
-        if (problem.started_at) {
-          const startTime = new Date(problem.started_at).getTime()
-          const elapsed = Math.floor((now - startTime) / 1000)
-          const currentTimeWorked = problem.total_time_worked || 0
-          const newTimeWorked = currentTimeWorked + elapsed
-
-          // Update with accumulated time and clear started_at
-          const { error: updateError } = await supabase
-            .from('user_solves')
-            .update({
-              total_time_worked: newTimeWorked,
-              started_at: null,
-              updated_at: new Date().toISOString(),
-            })
-            .eq('user_id', user.id)
-            .eq('problem_id', problem.problem_id)
-
-          if (updateError) {
-            console.error('Error updating time for problem:', problem.problem_id, updateError)
-          }
-        }
-      }
-    }
-
-    // Get existing solve data to preserve total_time_worked and focus_time
+    // Get existing solve data to preserve focus_time
     const { data: existingSolve } = await supabase
       .from('user_solves')
-      .select('total_time_worked, focus_time')
+      .select('focus_time, solved_at')
       .eq('user_id', user.id)
       .eq('problem_id', problemId)
       .single()
 
-    // Calculate started_at to account for previous time worked
-    // If there's previous time, set started_at to that many seconds ago
-    // so elapsed time calculation will continue from previous time
-    const previousTimeWorked = existingSolve?.total_time_worked ?? 0
-    const now = new Date()
-    const adjustedStartTime = new Date(now.getTime() - previousTimeWorked * 1000)
+    const now = new Date().toISOString()
 
-    // Now start the new problem, preserving existing time data
+    // Start the problem: set started_at to now, clear solved_at, set solved to false
     const { error } = await supabase
       .from('user_solves')
       .upsert({
         user_id: user.id,
         problem_id: problemId,
-        solved: false, // Explicitly set to false when starting
-        started_at: adjustedStartTime.toISOString(), // Adjusted to account for previous time
-        total_time_worked: previousTimeWorked, // Preserve existing time
+        solved: false,
+        started_at: now,
+        solved_at: null, // Clear solved_at when starting
         focus_time: existingSolve?.focus_time ?? 0, // Preserve existing focus time
-        updated_at: new Date().toISOString(),
+        updated_at: now,
       }, {
         onConflict: 'user_id,problem_id'
       })
@@ -384,55 +344,6 @@ export async function startProblem(problemId: string): Promise<boolean> {
   }
 }
 
-/**
- * Update total time worked on a problem
- */
-export async function updateTimeWorked(
-  problemId: string,
-  additionalSeconds: number
-): Promise<boolean> {
-  try {
-    const supabase = await createClient()
-    
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) {
-      throw new Error('User not authenticated')
-    }
-
-    // Get current time worked
-    const { data: existing } = await supabase
-      .from('user_solves')
-      .select('total_time_worked')
-      .eq('user_id', user.id)
-      .eq('problem_id', problemId)
-      .single()
-
-    const currentTime = existing?.total_time_worked || 0
-    const newTime = currentTime + additionalSeconds
-
-    const { error } = await supabase
-      .from('user_solves')
-      .upsert({
-        user_id: user.id,
-        problem_id: problemId,
-        total_time_worked: newTime,
-        updated_at: new Date().toISOString(),
-      }, {
-        onConflict: 'user_id,problem_id'
-      })
-
-    if (error) {
-      console.error('Error updating time worked:', error)
-      return false
-    }
-
-    revalidatePath('/gamam-150')
-    return true
-  } catch (error: any) {
-    console.error('Error in updateTimeWorked:', error)
-    return false
-  }
-}
 
 /**
  * Update focus time for a problem

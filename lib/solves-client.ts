@@ -9,7 +9,6 @@ import {
   setProblemStatus as setProblemStatusServer,
   toggleProblemStatus as toggleProblemStatusServer,
   startProblem as startProblemServer,
-  updateTimeWorked as updateTimeWorkedServer,
   updateFocusTime as updateFocusTimeServer,
   updateProblemNote as updateProblemNoteServer,
   type Problem,
@@ -85,8 +84,39 @@ export function useSolves() {
       const { data: { user } } = await supabase.auth.getUser()
       if (user) {
         const userSolves = await getUserSolves()
-        solvesCache = userSolves
-        setSolves(userSolves)
+        
+        // Merge server data with current state to preserve in-progress problems
+        // This prevents losing in-progress state when tab becomes active again
+        setSolves(prevSolves => {
+          const merged: Record<string, UserSolve> = { ...userSolves }
+          
+          // Preserve local in-progress state if it exists and server doesn't have it or has stale data
+          for (const [problemId, localSolve] of Object.entries(prevSolves)) {
+            const serverSolve = userSolves[problemId]
+            const isLocalInProgress = localSolve.started_at && !localSolve.solved
+            
+            if (isLocalInProgress) {
+              // If local has in-progress state, check if server has it too
+              if (!serverSolve || !serverSolve.started_at || serverSolve.solved) {
+                // Server doesn't have in-progress state, preserve local state
+                merged[problemId] = localSolve
+              } else {
+                // Server has in-progress state, use server's started_at but keep local state
+                // This handles the case where server save completed
+                merged[problemId] = {
+                  ...localSolve,
+                  started_at: serverSolve.started_at,
+                  // Keep other local state like focus_time if it's more recent
+                  focus_time: Math.max(localSolve.focus_time || 0, serverSolve.focus_time || 0),
+                }
+              }
+            }
+          }
+          
+          // Update cache with merged data
+          solvesCache = merged
+          return merged
+        })
       } else {
         solvesCache = {}
         setSolves({})
@@ -132,7 +162,6 @@ export function useSolves() {
               user_id: '',
               problem_id: problemId,
               solved: status,
-              total_time_worked: 0,
               focus_time: 0,
               created_at: new Date().toISOString(),
               updated_at: new Date().toISOString(),
@@ -162,7 +191,11 @@ export function useSolves() {
   }, [isAuthenticated, loadData])
 
   // Toggle problem status
-  // When marking a problem as solved, all other in-progress problems will be reset to "start" state.
+  // New state machine:
+  // - From "in progress" -> "solved" (when marking solved)
+  // - From "solved" -> "in progress" (when clicking solved again)
+  // Multiple problems can be in progress at once.
+  // State changes of one problem don't affect others.
   const toggleProblemStatus = useCallback(async (problemId: string): Promise<boolean | null> => {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) {
@@ -170,39 +203,48 @@ export function useSolves() {
     }
 
     try {
-      const currentStatus = solves[problemId]?.solved ?? false
-      const newStatus = !currentStatus
+      const currentSolve = solves[problemId]
+      const isCurrentlySolved = currentSolve?.solved ?? false
+      const now = new Date().toISOString()
 
       // Optimistically update UI immediately
       let optimisticSolves: Record<string, UserSolve> = {}
       setSolves(prev => {
         const updated = { ...prev }
         
-        // If marking as solved, clear all other in-progress problems
-        if (newStatus) {
-          for (const [id, solve] of Object.entries(updated)) {
-            if (id !== problemId && solve.started_at && !solve.solved) {
-              updated[id] = {
-                ...solve,
-                started_at: undefined,
-              }
-            }
-          }
-        }
-        
         // Update the current problem's status
         if (updated[problemId]) {
-          updated[problemId] = { ...updated[problemId], solved: newStatus }
+          if (isCurrentlySolved) {
+            // Currently solved -> change to in progress
+            // Clear solved_at, set started_at to now, set solved to false
+            updated[problemId] = {
+              ...updated[problemId],
+              solved: false,
+              solved_at: undefined,
+              started_at: now,
+            }
+          } else {
+            // Currently in progress -> change to solved
+            // Set solved_at to now, keep started_at, set solved to true
+            updated[problemId] = {
+              ...updated[problemId],
+              solved: true,
+              solved_at: now,
+              // Keep started_at as is
+            }
+          }
         } else {
+          // Create new solve entry (shouldn't happen, but handle it)
           updated[problemId] = {
             id: '',
             user_id: '',
             problem_id: problemId,
-            solved: newStatus,
-            total_time_worked: 0,
+            solved: true,
+            started_at: now,
+            solved_at: now,
             focus_time: 0,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
+            created_at: now,
+            updated_at: now,
           }
         }
         
@@ -222,7 +264,7 @@ export function useSolves() {
         loadData()
       })
       
-      return newStatus
+      return !isCurrentlySolved
     } catch (error: any) {
       console.error('Error toggling problem status:', error)
       // On error, revert optimistic update by reloading data
@@ -232,50 +274,26 @@ export function useSolves() {
   }, [solves, supabase.auth, loadData])
 
   // Start problem
-  // Only one problem can be in progress at a time.
-  // If another problem is in progress, it will be reset to "start" state.
+  // Multiple problems can be in progress at once.
+  // State changes of one problem don't affect others.
   const startProblem = useCallback(async (problemId: string): Promise<boolean> => {
     try {
       if (isAuthenticated) {
         const startTime = new Date().toISOString()
         
-        // Optimistically update UI immediately - clear other in-progress problems first
+        // Optimistically update UI immediately
         let optimisticSolves: Record<string, UserSolve> = {}
         setSolves(prev => {
           const updated = { ...prev }
-          const now = Date.now()
           
-          // Clear started_at for all other in-progress problems and save their time
-          for (const [id, solve] of Object.entries(updated)) {
-            if (id !== problemId && solve.started_at && !solve.solved) {
-              // Calculate elapsed time and add to total_time_worked
-              const startTime = new Date(solve.started_at).getTime()
-              const elapsed = Math.floor((now - startTime) / 1000)
-              const currentTimeWorked = solve.total_time_worked || 0
-              const newTimeWorked = currentTimeWorked + elapsed
-              
-              updated[id] = {
-                ...solve,
-                started_at: undefined,
-                total_time_worked: newTimeWorked, // Preserve accumulated time
-              }
-            }
-          }
-          
-          // Now start the new problem, preserving existing time data
+          // Start the new problem: set started_at to now, clear solved_at, set solved to false
           if (updated[problemId]) {
-            // Calculate adjusted start time to account for previous time worked
-            // If there's previous time, set started_at to that many seconds ago
-            // so elapsed time calculation will continue from previous time
-            const previousTimeWorked = updated[problemId].total_time_worked ?? 0
-            const adjustedStartTime = new Date(now - previousTimeWorked * 1000).toISOString()
-            
             updated[problemId] = {
               ...updated[problemId],
-              started_at: adjustedStartTime, // Adjusted to account for previous time
-              // Preserve existing total_time_worked and focus_time
-              total_time_worked: previousTimeWorked,
-              focus_time: updated[problemId].focus_time ?? 0,
+              solved: false,
+              started_at: startTime,
+              solved_at: undefined, // Clear solved_at when starting
+              // Preserve existing focus_time
             }
           } else {
             updated[problemId] = {
@@ -284,10 +302,9 @@ export function useSolves() {
               problem_id: problemId,
               solved: false,
               started_at: startTime,
-              total_time_worked: 0,
               focus_time: 0,
-              created_at: new Date().toISOString(),
-              updated_at: new Date().toISOString(),
+              created_at: startTime,
+              updated_at: startTime,
             }
           }
           
@@ -318,46 +335,6 @@ export function useSolves() {
     }
   }, [isAuthenticated, loadData])
 
-  // Update time worked
-  const updateTimeWorked = useCallback(async (problemId: string, additionalSeconds: number): Promise<boolean> => {
-    try {
-      if (isAuthenticated) {
-        // Optimistically update UI immediately
-        let optimisticSolves: Record<string, UserSolve> = {}
-        setSolves(prev => {
-          const updated = { ...prev }
-          if (updated[problemId]) {
-            updated[problemId] = {
-              ...updated[problemId],
-              total_time_worked: (updated[problemId].total_time_worked || 0) + additionalSeconds,
-            }
-          }
-          
-          // Store optimistic state for cache
-          optimisticSolves = updated
-          return updated
-        })
-        // Update cache immediately with optimistic values
-        solvesCache = optimisticSolves
-        cacheTimestamp = Date.now()
-        
-        // Save to server in background (don't await - fire and forget)
-        updateTimeWorkedServer(problemId, additionalSeconds).catch((error) => {
-          console.error('Error saving time worked to server:', error)
-          // On error, revert optimistic update by reloading data
-          loadData()
-        })
-        
-        return true
-      }
-      return false
-    } catch (error) {
-      console.error('Error updating time worked:', error)
-      // On error, revert optimistic update by reloading data
-      loadData()
-      return false
-    }
-  }, [isAuthenticated, loadData])
 
   // Update focus time
   const updateFocusTime = useCallback(async (problemId: string, additionalSeconds: number): Promise<boolean> => {
@@ -417,7 +394,6 @@ export function useSolves() {
               problem_id: problemId,
               solved: false,
               note,
-              total_time_worked: 0,
               focus_time: 0,
               created_at: new Date().toISOString(),
               updated_at: new Date().toISOString(),
@@ -484,7 +460,6 @@ export function useSolves() {
     setProblemStatus,
     toggleProblemStatus,
     startProblem,
-    updateTimeWorked,
     updateFocusTime,
     updateNote,
     triggerLogin,

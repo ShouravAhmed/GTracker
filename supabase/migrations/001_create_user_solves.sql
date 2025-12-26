@@ -3,6 +3,46 @@
 -- ============================================================================
 
 
+DO $$
+BEGIN
+  RAISE NOTICE '============================================================================';
+  RAISE NOTICE 'Cleaning up existing database objects...';
+  RAISE NOTICE '============================================================================';
+END $$;
+
+-- Drop triggers first
+DROP TRIGGER IF EXISTS update_user_solves_updated_at ON user_solves;
+
+-- Drop functions
+DROP FUNCTION IF EXISTS update_updated_at_column();
+
+-- Drop views
+DROP VIEW IF EXISTS problem_solve_counts;
+
+-- Drop policies
+DROP POLICY IF EXISTS "Everyone can view 150 Day problems" ON "150DayProblems";
+DROP POLICY IF EXISTS "Users can view their own solves" ON user_solves;
+DROP POLICY IF EXISTS "Users can insert their own solves" ON user_solves;
+DROP POLICY IF EXISTS "Users can update their own solves" ON user_solves;
+DROP POLICY IF EXISTS "Users can delete their own solves" ON user_solves;
+
+-- Drop tables (CASCADE will drop dependent objects)
+DROP TABLE IF EXISTS user_solves CASCADE;
+DROP TABLE IF EXISTS "150DayProblems" CASCADE;
+
+-- Drop indexes if they exist independently
+DROP INDEX IF EXISTS idx_150dayproblems_name;
+DROP INDEX IF EXISTS idx_150dayproblems_type;
+DROP INDEX IF EXISTS idx_150dayproblems_day;
+DROP INDEX IF EXISTS idx_user_solves_user_id;
+DROP INDEX IF EXISTS idx_user_solves_problem_id;
+DROP INDEX IF EXISTS idx_user_solves_solved;
+
+DO $$
+BEGIN
+  RAISE NOTICE 'Cleanup completed successfully!';
+  RAISE NOTICE '============================================================================';
+END $$;
 
 -- ============================================================================
 -- CREATE TABLES: Create fresh tables with new structure
@@ -69,7 +109,7 @@ BEGIN
       solved BOOLEAN NOT NULL DEFAULT true,
       note TEXT,
       started_at TIMESTAMP WITH TIME ZONE,
-      total_time_worked INTEGER NOT NULL DEFAULT 0, -- in seconds
+      solved_at TIMESTAMP WITH TIME ZONE,
       focus_time INTEGER NOT NULL DEFAULT 0, -- in seconds
       created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
       updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
