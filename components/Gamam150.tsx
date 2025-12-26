@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useSolves } from '@/lib/solves-client'
-import { Play, Clock, Target, FileText, Users } from 'lucide-react'
+import { Play, Timer, NotepadText, Users, Clock, CheckCircle } from 'lucide-react'
 import NoteEditor from './NoteEditor'
 import PomodoroTimer from './PomodoroTimer'
 import type { Problem as DBProblem } from '@/lib/supabase/solves'
@@ -485,7 +485,7 @@ export default function Gamam150() {
                   return (
                     <div
                       key={problem.id}
-                      className="grid grid-cols-1 sm:grid-cols-[40px_1fr_auto_auto_auto_auto_auto_auto] gap-2 sm:gap-4 items-center py-2 sm:py-3 border-b border-gray-100 dark:border-gray-700 last:border-b-0"
+                      className="grid grid-cols-1 sm:grid-cols-[40px_1fr_auto_auto_auto_auto_auto_140px] gap-2 sm:gap-4 items-center py-2 sm:py-3 border-b border-gray-100 dark:border-gray-700 last:border-b-0"
                     >
                       <span className="text-center font-bold text-gray-700 dark:text-gray-300 text-sm sm:text-base">
                         {problems.indexOf(problem) + 1}
@@ -590,11 +590,11 @@ export default function Gamam150() {
                             }
                             setSelectedFocusProblem(problem)
                           }}
-                          className="flex items-center gap-1 px-2 py-1 bg-purple-600 hover:bg-purple-700 text-white rounded text-xs sm:text-sm"
+                          className="flex flex-col items-center justify-center gap-0.5 px-2 py-1 hover:opacity-70 transition-opacity"
                           title="Focus timer"
                         >
-                          <Target size={14} />
-                          Focus
+                          <Timer size={24} className="text-gray-700 dark:text-gray-300" />
+                          <span className="text-[9px] leading-tight text-gray-600 dark:text-gray-400">focus</span>
                         </button>
                       </div>
                       {/* Note button column */}
@@ -607,15 +607,11 @@ export default function Gamam150() {
                             }
                             setSelectedNoteProblem(problem)
                           }}
-                          className={`flex items-center gap-1 px-2 py-1 rounded text-xs sm:text-sm ${
-                            hasNote
-                              ? 'bg-green-600 hover:bg-green-700 text-white'
-                              : 'bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300'
-                          }`}
+                          className="flex flex-col items-center justify-center gap-0.5 px-2 py-1 hover:opacity-70 transition-opacity"
                           title="Edit note"
                         >
-                          <FileText size={14} />
-                          Note
+                          <NotepadText size={24} className={hasNote ? 'text-green-600 dark:text-green-400' : 'text-gray-700 dark:text-gray-300'} />
+                          <span className="text-[9px] leading-tight text-gray-600 dark:text-gray-400">note</span>
                         </button>
                       </div>
                       {/* State button column */}
@@ -623,7 +619,7 @@ export default function Gamam150() {
                         {solvesLoading && isAuthenticated ? (
                           <button
                             disabled
-                            className="px-3 sm:px-4 py-1.5 sm:py-2 rounded-full text-xs sm:text-sm font-bold text-white transition-colors bg-gray-500 dark:bg-gray-500 cursor-not-allowed"
+                            className="w-full min-h-[32px] sm:min-h-[36px] flex items-center justify-center px-3 sm:px-4 py-1.5 sm:py-2 rounded-full text-xs sm:text-sm font-bold text-white transition-colors bg-gray-500 dark:bg-gray-500 cursor-not-allowed"
                           >
                             Loading...
                           </button>
@@ -636,7 +632,7 @@ export default function Gamam150() {
                               }
                               await handleStartProblem(problem.id)
                             }}
-                            className="flex items-center gap-1 px-3 sm:px-4 py-1.5 sm:py-2 bg-red-500 hover:bg-red-600 dark:bg-red-500 dark:hover:bg-red-600 text-white rounded-full text-xs sm:text-sm font-bold transition-colors"
+                            className="w-full min-h-[32px] sm:min-h-[36px] flex items-center justify-center gap-1 px-3 sm:px-4 py-1.5 sm:py-2 bg-red-500 hover:bg-red-600 dark:bg-red-500 dark:hover:bg-red-600 text-white rounded-full text-xs sm:text-sm font-bold transition-colors"
                           >
                             <Play size={14} />
                             Start
@@ -650,10 +646,11 @@ export default function Gamam150() {
                               }
                               await updateProblemStatus(problem.id)
                             }}
-                            className="px-3 sm:px-4 py-1.5 sm:py-2 bg-blue-500 hover:bg-blue-600 dark:bg-blue-500 dark:hover:bg-blue-600 text-white rounded-full text-xs sm:text-sm font-bold transition-colors group animate-breathe"
+                            className="w-full min-h-[32px] sm:min-h-[36px] flex items-center justify-center gap-1 px-3 sm:px-4 py-1.5 sm:py-2 bg-blue-500 hover:bg-blue-600 dark:bg-blue-500 dark:hover:bg-blue-600 text-white rounded-full text-xs sm:text-sm font-bold transition-colors group animate-breathe"
                           >
-                            <span className="group-hover:hidden">In progress</span>
-                            <span className="hidden group-hover:inline">mark solved</span>
+                            <Clock size={14} />
+                            <span className="group-hover:hidden whitespace-nowrap">In progress</span>
+                            <span className="hidden group-hover:inline whitespace-nowrap">Mark solved</span>
                           </button>
                         ) : (
                           <button
@@ -664,8 +661,9 @@ export default function Gamam150() {
                               }
                               await updateProblemStatus(problem.id)
                             }}
-                            className="px-3 sm:px-4 py-1.5 sm:py-2 rounded-full text-xs sm:text-sm font-bold text-white transition-colors bg-green-500 hover:bg-green-600 dark:bg-green-500 dark:hover:bg-green-600"
+                            className="w-full min-h-[32px] sm:min-h-[36px] flex items-center justify-center gap-1 px-3 sm:px-4 py-1.5 sm:py-2 rounded-full text-xs sm:text-sm font-bold text-white transition-colors bg-green-500 hover:bg-green-600 dark:bg-green-500 dark:hover:bg-green-600"
                           >
+                            <CheckCircle size={14} />
                             Solved
                           </button>
                         )}
