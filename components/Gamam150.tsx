@@ -1,10 +1,8 @@
 'use client'
 
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useSolves } from '@/lib/solves-client'
-import { Play, Timer, NotepadText, Users, Clock, CheckCircle } from 'lucide-react'
-import NoteEditor from './NoteEditor'
-import PomodoroTimer from './PomodoroTimer'
+import { Play, Timer, NotepadText, Users, Clock, CheckCircle, X, Pause, RotateCcw, Bold, Italic, Underline, Link, List } from 'lucide-react'
 import type { Problem as DBProblem } from '@/lib/supabase/solves'
 
 type ProblemData = Record<string, DBProblem[]>
@@ -26,8 +24,11 @@ export default function Gamam150() {
   } = useSolves()
 
   const [codingProblems, setCodingProblems] = useState<ProblemData>({})
-  const [selectedNoteProblem, setSelectedNoteProblem] = useState<DBProblem | null>(null)
-  const [selectedFocusProblem, setSelectedFocusProblem] = useState<DBProblem | null>(null)
+  const [expandedProblem, setExpandedProblem] = useState<{
+    id: string
+    showNote: boolean
+    showFocus: boolean
+  } | null>(null)
   const [elapsedTimes, setElapsedTimes] = useState<Record<string, number>>({})
 
   const [isCodingChecked, setIsCodingChecked] = useState(true)
@@ -178,12 +179,34 @@ export default function Gamam150() {
 
   const handleFocusTimeComplete = async (problemId: string, seconds: number) => {
     await updateFocusTime(problemId, seconds)
-    setSelectedFocusProblem(null)
+    // Keep expanded - don't close on completion
   }
 
   const handleNoteSave = async (problemId: string, content: string) => {
     await updateNote(problemId, content)
-    setSelectedNoteProblem(null)
+    // Note editor stays open, just save
+  }
+
+  const toggleNote = (problemId: string) => {
+    setExpandedProblem(prev => {
+      if (prev && prev.id === problemId) {
+        // If already expanded, collapse
+        return null
+      }
+      // Expand with both note and focus enabled
+      return { id: problemId, showNote: true, showFocus: true }
+    })
+  }
+
+  const toggleFocus = (problemId: string) => {
+    setExpandedProblem(prev => {
+      if (prev && prev.id === problemId) {
+        // If already expanded, collapse
+        return null
+      }
+      // Expand with both note and focus enabled
+      return { id: problemId, showNote: true, showFocus: true }
+    })
   }
 
   const formatTime = (seconds: number): string => {
@@ -482,11 +505,16 @@ export default function Gamam150() {
                     }
                   }
 
+                  const isExpanded = expandedProblem?.id === problem.id && (expandedProblem.showNote || expandedProblem.showFocus)
+
                   return (
                     <div
                       key={problem.id}
-                      className="grid grid-cols-1 sm:grid-cols-[40px_1fr_auto_auto_auto_auto_auto_140px] gap-2 sm:gap-4 items-center py-2 sm:py-3 border-b border-gray-100 dark:border-gray-700 last:border-b-0"
+                      className="border-b border-gray-100 dark:border-gray-700 last:border-b-0 transition-all duration-300 ease-in-out"
                     >
+                      {!isExpanded ? (
+                        // Normal collapsed view
+                        <div className="grid grid-cols-1 sm:grid-cols-[40px_1fr_auto_auto_auto_auto_auto_140px] gap-2 sm:gap-4 items-center py-2 sm:py-3">
                       <span className="text-center font-bold text-gray-700 dark:text-gray-300 text-sm sm:text-base">
                         {problems.indexOf(problem) + 1}
                       </span>
@@ -588,7 +616,7 @@ export default function Gamam150() {
                               await triggerLogin()
                               return
                             }
-                            setSelectedFocusProblem(problem)
+                                toggleFocus(problem.id)
                           }}
                           className="flex flex-col items-center justify-center gap-0.5 px-2 py-1 hover:opacity-70 transition-opacity"
                           title="Focus timer"
@@ -605,12 +633,15 @@ export default function Gamam150() {
                               await triggerLogin()
                               return
                             }
-                            setSelectedNoteProblem(problem)
+                                toggleNote(problem.id)
                           }}
                           className="flex flex-col items-center justify-center gap-0.5 px-2 py-1 hover:opacity-70 transition-opacity"
                           title="Edit note"
                         >
-                          <NotepadText size={24} className={hasNote ? 'text-green-600 dark:text-green-400' : 'text-gray-700 dark:text-gray-300'} />
+                              <NotepadText 
+                                size={24} 
+                                className={hasNote ? 'text-green-600 dark:text-green-400' : 'text-gray-700 dark:text-gray-300'} 
+                              />
                           <span className="text-[9px] leading-tight text-gray-600 dark:text-gray-400">note</span>
                         </button>
                       </div>
@@ -668,6 +699,191 @@ export default function Gamam150() {
                           </button>
                         )}
                       </div>
+                        </div>
+                      ) : (
+                        // Expanded view with 3 equal columns
+                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 py-4 transition-all duration-300 ease-in-out">
+                          {/* Left Column: Problem Info */}
+                          <div className="flex items-center h-full">
+                            {/* Centered content */}
+                            <div className="flex flex-col gap-3 items-center justify-center w-full">
+                              {/* First row: Problem title and difficulty */}
+                              <div className="flex flex-col gap-2 items-center">
+                                <div className="flex items-center gap-2 justify-center">
+                                  <a
+                                    href={problem.url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-blue-600 dark:text-blue-400 hover:underline text-sm sm:text-base font-medium"
+                                  >
+                                    {problem.name}
+                                  </a>
+                                  <div className="flex items-center gap-1 text-xs text-gray-600 dark:text-gray-400">
+                                    <Users size={12} />
+                                    <span>{solveCount}</span>
+                                  </div>
+                                </div>
+                                {(problem.type || problem.difficulty) && (
+                                  <button
+                                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 backdrop-blur-md border shadow-sm ${getGlassMorphismStyles(problem.difficulty)}`}
+                                  >
+                                    {problem.type && <span>{problem.type}</span>}
+                                    {problem.type && problem.difficulty && <span className="mx-1.5">•</span>}
+                                    {problem.difficulty && <span>{problem.difficulty}</span>}
+                                  </button>
+                                )}
+                              </div>
+                              
+                              {/* Second row: Solving time and focus time */}
+                              <div className="grid grid-cols-2 gap-3 w-full">
+                                <div className="flex flex-col gap-1 items-center">
+                                  <span className="text-[10px] text-gray-500 dark:text-gray-400">Solving Time</span>
+                                  <div className="grid grid-cols-3 gap-1">
+                                    {(() => {
+                                      const { hours, minutes, seconds: secs } = getTimeComponents(solvingTime)
+                                      return (
+                                        <>
+                                          <div className="flex flex-col items-center justify-center px-1.5 py-1 rounded-lg bg-gray-100/50 dark:bg-gray-800/50 backdrop-blur-sm border border-gray-200/50 dark:border-gray-700/50 shadow-sm">
+                                            <span className="text-xs font-semibold text-amber-800 dark:text-amber-600">
+                                              {String(hours).padStart(2, '0')}
+                                            </span>
+                                          </div>
+                                          <div className="flex flex-col items-center justify-center px-1.5 py-1 rounded-lg bg-gray-100/50 dark:bg-gray-800/50 backdrop-blur-sm border border-gray-200/50 dark:border-gray-700/50 shadow-sm">
+                                            <span className="text-xs font-semibold text-amber-800 dark:text-amber-600">
+                                              {String(minutes).padStart(2, '0')}
+                                            </span>
+                                          </div>
+                                          <div className="flex flex-col items-center justify-center px-1.5 py-1 rounded-lg bg-gray-100/50 dark:bg-gray-800/50 backdrop-blur-sm border border-gray-200/50 dark:border-gray-700/50 shadow-sm">
+                                            <span className="text-xs font-semibold text-amber-800 dark:text-amber-600">
+                                              {String(secs).padStart(2, '0')}
+                                            </span>
+                                          </div>
+                                        </>
+                                      )
+                                    })()}
+                                  </div>
+                                </div>
+                                <div className="flex flex-col gap-1 items-center">
+                                  <span className="text-[10px] text-gray-500 dark:text-gray-400">Focus Time</span>
+                                  <div className="grid grid-cols-3 gap-1">
+                                    {(() => {
+                                      const { hours, minutes, seconds: secs } = getTimeComponents(userSolve?.focus_time || 0)
+                                      return (
+                                        <>
+                                          <div className="flex flex-col items-center justify-center px-1.5 py-1 rounded-lg bg-gray-100/50 dark:bg-gray-800/50 backdrop-blur-sm border border-gray-200/50 dark:border-gray-700/50 shadow-sm">
+                                            <span className="text-xs font-semibold text-amber-800 dark:text-amber-600">
+                                              {String(hours).padStart(2, '0')}
+                                            </span>
+                                          </div>
+                                          <div className="flex flex-col items-center justify-center px-1.5 py-1 rounded-lg bg-gray-100/50 dark:bg-gray-800/50 backdrop-blur-sm border border-gray-200/50 dark:border-gray-700/50 shadow-sm">
+                                            <span className="text-xs font-semibold text-amber-800 dark:text-amber-600">
+                                              {String(minutes).padStart(2, '0')}
+                                            </span>
+                                          </div>
+                                          <div className="flex flex-col items-center justify-center px-1.5 py-1 rounded-lg bg-gray-100/50 dark:bg-gray-800/50 backdrop-blur-sm border border-gray-200/50 dark:border-gray-700/50 shadow-sm">
+                                            <span className="text-xs font-semibold text-amber-800 dark:text-amber-600">
+                                              {String(secs).padStart(2, '0')}
+                                            </span>
+                                          </div>
+                                        </>
+                                      )
+                                    })()}
+                                  </div>
+                                </div>
+                              </div>
+                              
+                              {/* Third row: Problem state and Close button */}
+                              <div className="flex flex-col gap-1 items-center w-full">
+                                <span className="text-[10px] text-gray-500 dark:text-gray-400">Status</span>
+                                <div className="grid grid-cols-2 gap-2 w-full">
+                                  {solvesLoading && isAuthenticated ? (
+                                    <button
+                                      disabled
+                                      className="w-full min-h-[32px] flex items-center justify-center px-3 py-1.5 rounded-full text-xs font-bold text-white transition-colors bg-gray-500 dark:bg-gray-500 cursor-not-allowed"
+                                    >
+                                      Loading...
+                                    </button>
+                                  ) : !hasStarted ? (
+                                    <button
+                                      onClick={async () => {
+                                        if (!isAuthenticated) {
+                                          await triggerLogin()
+                                          return
+                                        }
+                                        await handleStartProblem(problem.id)
+                                      }}
+                                      className="w-full min-h-[32px] flex items-center justify-center gap-1 px-3 py-1.5 bg-red-500 hover:bg-red-600 dark:bg-red-500 dark:hover:bg-red-600 text-white rounded-full text-xs font-bold transition-colors"
+                                    >
+                                      <Play size={12} />
+                                      Start
+                                    </button>
+                                  ) : isInProgress ? (
+                                    <button
+                                      onClick={async () => {
+                                        if (!isAuthenticated) {
+                                          await triggerLogin()
+                                          return
+                                        }
+                                        await updateProblemStatus(problem.id)
+                                      }}
+                                      className="w-full min-h-[32px] flex items-center justify-center gap-1 px-3 py-1.5 bg-blue-500 hover:bg-blue-600 dark:bg-blue-500 dark:hover:bg-blue-600 text-white rounded-full text-xs font-bold transition-colors group animate-breathe"
+                                    >
+                                      <Clock size={12} />
+                                      <span className="group-hover:hidden whitespace-nowrap">In progress</span>
+                                      <span className="hidden group-hover:inline whitespace-nowrap">Mark solved</span>
+                                    </button>
+                                  ) : (
+                                    <button
+                                      onClick={async () => {
+                                        if (!isAuthenticated) {
+                                          await triggerLogin()
+                                          return
+                                        }
+                                        await updateProblemStatus(problem.id)
+                                      }}
+                                      className="w-full min-h-[32px] flex items-center justify-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold text-white transition-colors bg-green-500 hover:bg-green-600 dark:bg-green-500 dark:hover:bg-green-600"
+                                    >
+                                      <CheckCircle size={12} />
+                                      Solved
+                                    </button>
+                                  )}
+                                  <button
+                                    onClick={() => setExpandedProblem(null)}
+                                    className="w-full min-h-[32px] flex items-center justify-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold text-white transition-colors bg-gray-500 hover:bg-gray-600 dark:bg-gray-500 dark:hover:bg-gray-600"
+                                  >
+                                    Close
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                          
+                          {/* Middle Column: Focus Timer */}
+                          <div className="flex flex-col">
+                            <div className="h-full bg-gray-50 dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
+                              <InlinePomodoroTimer
+                                problemId={problem.id}
+                                problemName={problem.name}
+                                onComplete={(seconds) => handleFocusTimeComplete(problem.id, seconds)}
+                                onClose={() => setExpandedProblem(null)}
+                              />
+                            </div>
+                          </div>
+                          
+                          {/* Right Column: Note Editor */}
+                          <div className="flex flex-col">
+                            <div className="h-full bg-gray-50 dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
+                              <InlineNoteEditor
+                                problemId={problem.id}
+                                initialContent={getUserSolve(problem.id)?.note || ''}
+                                onSave={(content) => handleNoteSave(problem.id, content)}
+                                onClose={() => setExpandedProblem(null)}
+                                problemName={problem.name}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )
                 })}
@@ -676,23 +892,313 @@ export default function Gamam150() {
           ))}
         </div>
       </div>
+    </div>
+  )
+}
 
-      {selectedNoteProblem && (
-        <NoteEditor
-          initialContent={getUserSolve(selectedNoteProblem.id)?.note || ''}
-          onSave={(content) => handleNoteSave(selectedNoteProblem.id, content)}
-          onClose={() => setSelectedNoteProblem(null)}
-          problemName={selectedNoteProblem.name}
-        />
-      )}
+// Inline Pomodoro Timer Component
+function InlinePomodoroTimer({ 
+  problemId, 
+  problemName, 
+  onComplete, 
+  onClose 
+}: { 
+  problemId: string
+  problemName: string
+  onComplete: (seconds: number) => void
+  onClose: () => void
+}) {
+  const [initialMinutes, setInitialMinutes] = useState(25)
+  const [minutes, setMinutes] = useState(25)
+  const [seconds, setSeconds] = useState(0)
+  const [isRunning, setIsRunning] = useState(false)
+  const [elapsedSeconds, setElapsedSeconds] = useState(0)
+  const intervalRef = useRef<NodeJS.Timeout | null>(null)
+  const startTimeRef = useRef<number | null>(null)
 
-      {selectedFocusProblem && (
-        <PomodoroTimer
-          onComplete={(seconds) => handleFocusTimeComplete(selectedFocusProblem.id, seconds)}
-          onClose={() => setSelectedFocusProblem(null)}
-          problemName={selectedFocusProblem.name}
-        />
-      )}
+  useEffect(() => {
+    if (isRunning && startTimeRef.current) {
+      intervalRef.current = setInterval(() => {
+        const now = Date.now()
+        const elapsed = Math.floor((now - startTimeRef.current!) / 1000)
+        setElapsedSeconds(elapsed)
+        
+        const totalSeconds = initialMinutes * 60
+        const remaining = Math.max(0, totalSeconds - elapsed)
+        const newMinutes = Math.floor(remaining / 60)
+        const newSecs = remaining % 60
+
+        setMinutes(newMinutes)
+        setSeconds(newSecs)
+
+        if (remaining <= 0) {
+          setIsRunning(false)
+          onComplete(elapsed)
+        }
+      }, 1000)
+    } else {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current)
+        intervalRef.current = null
+      }
+    }
+
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current)
+      }
+    }
+  }, [isRunning, initialMinutes, onComplete])
+
+  const handleStart = () => {
+    if (!isRunning) {
+      startTimeRef.current = Date.now() - elapsedSeconds * 1000
+      setIsRunning(true)
+    }
+  }
+
+  const handlePause = () => {
+    setIsRunning(false)
+  }
+
+  const handleReset = () => {
+    setIsRunning(false)
+    setElapsedSeconds(0)
+    setMinutes(initialMinutes)
+    setSeconds(0)
+    startTimeRef.current = null
+  }
+
+  const handleStop = () => {
+    if (elapsedSeconds > 0) {
+      onComplete(elapsedSeconds)
+    }
+    onClose()
+  }
+
+  const formatTime = (mins: number, secs: number) => {
+    return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`
+  }
+
+  const totalSeconds = initialMinutes * 60
+  const progress = totalSeconds > 0 ? ((totalSeconds - elapsedSeconds) / totalSeconds) * 100 : 0
+
+  return (
+    <div className="flex flex-col h-full">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Focus Timer</h3>
+        <button
+          onClick={onClose}
+          className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+        >
+          <X size={16} />
+        </button>
+      </div>
+
+      <div className="flex flex-col items-center mb-3">
+        <div className="mb-2">
+          <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+            Duration (min)
+          </label>
+          <input
+            type="number"
+            min="1"
+            max="120"
+            value={initialMinutes}
+            onChange={(e) => {
+              const val = parseInt(e.target.value) || 25
+              setInitialMinutes(val)
+              if (!isRunning) {
+                setMinutes(val)
+                setSeconds(0)
+              }
+            }}
+            disabled={isRunning}
+            className="w-20 px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-white disabled:opacity-50"
+          />
+        </div>
+        <div className="relative w-32 h-32 mb-2">
+          <svg className="transform -rotate-90 w-32 h-32">
+            <circle
+              cx="64"
+              cy="64"
+              r="58"
+              stroke="currentColor"
+              strokeWidth="4"
+              fill="none"
+              className="text-gray-200 dark:text-gray-700"
+            />
+            <circle
+              cx="64"
+              cy="64"
+              r="58"
+              stroke="currentColor"
+              strokeWidth="4"
+              fill="none"
+              strokeDasharray={`${2 * Math.PI * 58}`}
+              strokeDashoffset={`${2 * Math.PI * 58 * (1 - progress / 100)}`}
+              className="text-blue-600 dark:text-blue-500 transition-all duration-1000"
+            />
+          </svg>
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="text-center">
+              <div className="text-2xl font-bold text-gray-900 dark:text-white mb-1">
+                {formatTime(minutes, seconds)}
+              </div>
+              <div className="text-xs text-gray-500 dark:text-gray-400">
+                {isRunning ? 'Focusing...' : 'Paused'}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <div className="flex items-center justify-center gap-2">
+          {!isRunning ? (
+            <button
+              onClick={handleStart}
+              className="flex items-center gap-1 px-3 py-1.5 text-xs bg-green-600 hover:bg-green-700 text-white rounded font-medium"
+            >
+              <Play size={14} />
+              Start
+            </button>
+          ) : (
+            <button
+              onClick={handlePause}
+              className="flex items-center gap-1 px-3 py-1.5 text-xs bg-yellow-600 hover:bg-yellow-700 text-white rounded font-medium"
+            >
+              <Pause size={14} />
+              Pause
+            </button>
+          )}
+          <button
+            onClick={handleReset}
+            className="flex items-center gap-1 px-3 py-1.5 text-xs bg-gray-600 hover:bg-gray-700 text-white rounded font-medium"
+          >
+            <RotateCcw size={14} />
+            Reset
+          </button>
+        </div>
+        <button
+          onClick={handleStop}
+          className="w-full px-3 py-1.5 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded"
+        >
+          Save & Close
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// Inline Note Editor Component
+function InlineNoteEditor({
+  problemId,
+  initialContent = '',
+  onSave,
+  onClose,
+  problemName
+}: {
+  problemId: string
+  initialContent?: string
+  onSave: (content: string) => void
+  onClose: () => void
+  problemName: string
+}) {
+  const [content, setContent] = useState(initialContent)
+  const editorRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (editorRef.current && initialContent) {
+      editorRef.current.innerHTML = initialContent
+    }
+  }, [initialContent])
+
+  const formatText = (command: string, value?: string) => {
+    document.execCommand(command, false, value)
+    editorRef.current?.focus()
+  }
+
+  const handleSave = () => {
+    const htmlContent = editorRef.current?.innerHTML || ''
+    onSave(htmlContent)
+  }
+
+  const handleInput = () => {
+    if (editorRef.current) {
+      setContent(editorRef.current.innerHTML)
+    }
+  }
+
+  return (
+    <div className="flex flex-col h-full">
+      <div className="flex items-center justify-between mb-2">
+        <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Note</h3>
+        <button
+          onClick={onClose}
+          className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+        >
+          <X size={16} />
+        </button>
+      </div>
+
+      <div className="flex items-center gap-1 p-1 border border-gray-200 dark:border-gray-700 rounded bg-gray-50 dark:bg-gray-900 mb-2">
+        <button
+          onClick={() => formatText('bold')}
+          className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded"
+          title="Bold"
+        >
+          <Bold size={12} className="text-gray-700 dark:text-gray-300" />
+        </button>
+        <button
+          onClick={() => formatText('italic')}
+          className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded"
+          title="Italic"
+        >
+          <Italic size={12} className="text-gray-700 dark:text-gray-300" />
+        </button>
+        <button
+          onClick={() => formatText('underline')}
+          className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded"
+          title="Underline"
+        >
+          <Underline size={12} className="text-gray-700 dark:text-gray-300" />
+        </button>
+        <div className="w-px h-4 bg-gray-300 dark:bg-gray-600" />
+        <button
+          onClick={() => {
+            const url = prompt('Enter URL:')
+            if (url) formatText('createLink', url)
+          }}
+          className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded"
+          title="Insert Link"
+        >
+          <Link size={12} className="text-gray-700 dark:text-gray-300" />
+        </button>
+        <button
+          onClick={() => formatText('insertUnorderedList')}
+          className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded"
+          title="Bullet List"
+        >
+          <List size={12} className="text-gray-700 dark:text-gray-300" />
+        </button>
+      </div>
+
+      <div
+        ref={editorRef}
+        contentEditable
+        onInput={handleInput}
+        className="flex-1 p-2 overflow-y-auto text-sm text-gray-900 dark:text-white focus:outline-none min-h-[150px] max-h-[200px] border border-gray-200 dark:border-gray-700 rounded bg-white dark:bg-gray-900"
+      />
+
+      <div className="flex items-center justify-end gap-2 mt-2">
+        <button
+          onClick={handleSave}
+          className="px-3 py-1.5 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded"
+        >
+          Save
+        </button>
+      </div>
     </div>
   )
 }
