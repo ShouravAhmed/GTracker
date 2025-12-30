@@ -14,6 +14,7 @@ export default function Gamam150() {
     problems,
     solves,
     solveCounts,
+    moduleStarts,
     loading: solvesLoading,
     isAuthenticated,
     getProblemStatus,
@@ -23,6 +24,8 @@ export default function Gamam150() {
     updateFocusTime,
     updateNote,
     triggerLogin,
+    startModule,
+    checkModuleStarted,
   } = useSolves()
 
   const [codingProblems, setCodingProblems] = useState<ProblemData>({})
@@ -40,7 +43,11 @@ export default function Gamam150() {
 
   // Organize problems by day and filter by category
   useEffect(() => {
-    if (!problems || problems.length === 0) return
+    if (!problems || problems.length === 0) {
+      setCodingProblems({})
+      console.warn('⚠️ No problems available. Please run: npm run upload-150day-problems')
+      return
+    }
 
     const data: ProblemData = {}
 
@@ -260,9 +267,56 @@ export default function Gamam150() {
     return Object.keys(codingProblems).filter(day => isDayCompleted(day)).length
   }, [codingProblems, solves])
 
-  // Show skeleton loader when data is loading or problems haven't loaded yet
-  if (solvesLoading || problems.length === 0) {
+  // Check if GAMAM 150 module has been started (module type 'all')
+  const moduleHasStarted = useMemo(() => {
+    return checkModuleStarted('all')
+  }, [checkModuleStarted, moduleStarts])
+
+  // Get first problem ID for starting the module
+  const firstProblemId = useMemo(() => {
+    const allProblems = Object.values(codingProblems).flat()
+    return allProblems.length > 0 ? allProblems[0].id : undefined
+  }, [codingProblems])
+
+  const handleStartModule = async () => {
+    if (!isAuthenticated) {
+      await triggerLogin()
+      return
+    }
+
+    // Start the module in the database
+    await startModule('all')
+    
+    // Also start the first problem
+    if (firstProblemId) {
+      await startProblem(firstProblemId)
+    }
+  }
+
+  // Show skeleton loader when data is loading
+  if (solvesLoading) {
     return <SkeletonLoader />
+  }
+
+  // Show message if no problems are available
+  if (problems.length === 0) {
+    return (
+      <div className="min-h-screen bg-white dark:bg-gray-900 px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+        <div className="max-w-6xl mx-auto">
+          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-center text-gray-900 dark:text-white mb-6 sm:mb-10">
+            GAMAM 150 Day Tracker
+          </h1>
+          <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-6 text-center">
+            <p className="text-lg text-yellow-800 dark:text-yellow-200 mb-2">
+              No problems found
+            </p>
+            <p className="text-sm text-yellow-700 dark:text-yellow-300">
+              Please run <code className="bg-yellow-100 dark:bg-yellow-900/40 px-2 py-1 rounded">npm run upload-150day-problems</code> to populate the database with problems.
+            </p>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -271,6 +325,29 @@ export default function Gamam150() {
         <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-center text-gray-900 dark:text-white mb-6 sm:mb-10">
           GAMAM 150 Day Tracker
         </h1>
+
+        {/* Start Module Banner - shown when module hasn't been started */}
+        {!moduleHasStarted && (
+          <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4 sm:p-6 mb-6">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div className="flex-1">
+                <h3 className="text-lg font-semibold text-yellow-800 dark:text-yellow-200 mb-1">
+                  Start the module to begin practicing
+                </h3>
+                <p className="text-sm text-yellow-700 dark:text-yellow-300">
+                  Click the button below to start this module. Once started, all features will be enabled.
+                </p>
+              </div>
+              <button
+                onClick={handleStartModule}
+                className="flex items-center gap-2 px-6 py-3 bg-yellow-600 hover:bg-yellow-700 dark:bg-yellow-500 dark:hover:bg-yellow-600 text-white rounded-lg font-semibold transition-colors whitespace-nowrap"
+              >
+                <Play size={18} />
+                Start Module
+              </button>
+            </div>
+          </div>
+        )}
 
         <div className="flex flex-col sm:flex-row justify-between items-center gap-4 sm:gap-6 p-4 sm:p-6 bg-gray-50 dark:bg-gray-800 rounded-lg shadow-md mb-6">
           <div className="flex flex-col items-center sm:items-start">
@@ -359,7 +436,17 @@ export default function Gamam150() {
         </div>
 
         <div className="space-y-4 sm:space-y-6">
-          {Object.entries(codingProblems).map(([day, problems]) => (
+          {Object.keys(codingProblems).length === 0 ? (
+            <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-6 text-center">
+              <p className="text-lg text-yellow-800 dark:text-yellow-200 mb-2">
+                No problems found
+              </p>
+              <p className="text-sm text-yellow-700 dark:text-yellow-300">
+                Please run <code className="bg-yellow-100 dark:bg-yellow-900/40 px-2 py-1 rounded">npm run upload-150day-problems</code> to populate the database with problems.
+              </p>
+            </div>
+          ) : (
+            Object.entries(codingProblems).map(([day, problems]) => (
             <div key={day} className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 sm:p-6 hover:shadow-lg transition-shadow">
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4 mb-4 sm:mb-6 pb-4 border-b border-gray-200 dark:border-gray-700">
                 <span className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white">
@@ -435,7 +522,7 @@ export default function Gamam150() {
                         </div>
                       </div>
                       {/* Solving time column */}
-                      <div className="relative">
+                      <div className={`relative ${!moduleHasStarted ? 'blur-sm' : ''}`}>
                         <div className="flex flex-col gap-0.5">
                           <div className="grid grid-cols-3 gap-0.5">
                             {(() => {
@@ -467,7 +554,7 @@ export default function Gamam150() {
                         </div>
                       </div>
                       {/* Focus time column */}
-                      <div className="relative">
+                      <div className={`relative ${!moduleHasStarted ? 'blur-sm' : ''}`}>
                         <div className="flex flex-col gap-0.5">
                           <div className="grid grid-cols-3 gap-0.5">
                             {(() => {
@@ -499,7 +586,7 @@ export default function Gamam150() {
                         </div>
                       </div>
                       {/* Type/Difficulty column */}
-                      <div className="relative">
+                      <div className={`relative ${!moduleHasStarted ? 'blur-sm' : ''}`}>
                         {(problem.type || problem.difficulty) && (
                           <button
                             className={`px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all duration-200 backdrop-blur-md border shadow-sm ${getGlassMorphismStyles(problem.difficulty)}`}
@@ -511,16 +598,22 @@ export default function Gamam150() {
                         )}
                       </div>
                       {/* Focus button column */}
-                      <div className="relative">
+                      <div className={`relative ${!moduleHasStarted ? 'blur-sm' : ''}`}>
                         <button
                           onClick={async () => {
+                            if (!moduleHasStarted) return
                             if (!isAuthenticated) {
                               await triggerLogin()
                               return
                             }
                                 toggleFocus(problem.id)
                           }}
-                          className="flex flex-col items-center justify-center gap-0.5 px-2 py-1 hover:opacity-70 transition-opacity"
+                          disabled={!moduleHasStarted}
+                          className={`flex flex-col items-center justify-center gap-0.5 px-2 py-1 transition-opacity ${
+                            moduleHasStarted 
+                              ? 'hover:opacity-70 cursor-pointer' 
+                              : 'opacity-50 cursor-not-allowed'
+                          }`}
                           title="Focus timer"
                         >
                           <Timer size={24} className="text-gray-700 dark:text-gray-300" />
@@ -528,16 +621,22 @@ export default function Gamam150() {
                         </button>
                       </div>
                       {/* Note button column */}
-                      <div className="relative">
+                      <div className={`relative ${!moduleHasStarted ? 'blur-sm' : ''}`}>
                         <button
                           onClick={async () => {
+                            if (!moduleHasStarted) return
                             if (!isAuthenticated) {
                               await triggerLogin()
                               return
                             }
                                 toggleNote(problem.id)
                           }}
-                          className="flex flex-col items-center justify-center gap-0.5 px-2 py-1 hover:opacity-70 transition-opacity"
+                          disabled={!moduleHasStarted}
+                          className={`flex flex-col items-center justify-center gap-0.5 px-2 py-1 transition-opacity ${
+                            moduleHasStarted 
+                              ? 'hover:opacity-70 cursor-pointer' 
+                              : 'opacity-50 cursor-not-allowed'
+                          }`}
                           title="Edit note"
                         >
                               <NotepadText 
@@ -548,13 +647,21 @@ export default function Gamam150() {
                         </button>
                       </div>
                       {/* State button column */}
-                      <div className="relative">
+                      <div className={`relative ${!moduleHasStarted ? 'blur-sm' : ''}`}>
                         {solvesLoading && isAuthenticated ? (
                           <button
                             disabled
                             className="w-full min-h-[32px] sm:min-h-[36px] flex items-center justify-center px-3 sm:px-4 py-1.5 sm:py-2 rounded-full text-xs sm:text-sm font-bold text-white transition-colors bg-gray-500 dark:bg-gray-500 cursor-not-allowed"
                           >
                             Loading...
+                          </button>
+                        ) : !moduleHasStarted ? (
+                          <button
+                            disabled
+                            className="w-full min-h-[32px] sm:min-h-[36px] flex items-center justify-center gap-1 px-3 sm:px-4 py-1.5 sm:py-2 bg-gray-400 dark:bg-gray-600 text-white rounded-full text-xs sm:text-sm font-bold cursor-not-allowed opacity-50"
+                          >
+                            <Play size={14} />
+                            Start
                           </button>
                         ) : !hasStarted ? (
                           <button
@@ -814,7 +921,8 @@ export default function Gamam150() {
                 })}
               </div>
             </div>
-          ))}
+          ))
+          )}
         </div>
       </div>
     </div>

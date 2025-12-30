@@ -433,3 +433,130 @@ export async function updateProblemNote(
     return false
   }
 }
+
+/**
+ * Start a module for the current user
+ * @param moduleType - The module type (e.g., 'Coding', 'System Design', 'all' for GAMAM 150)
+ */
+export async function startModule(moduleType: string): Promise<boolean> {
+  try {
+    const supabase = await createClient()
+    
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) {
+      throw new Error('User not authenticated')
+    }
+
+    const now = new Date().toISOString()
+
+    const { error } = await supabase
+      .from('user_module_starts')
+      .upsert({
+        user_id: user.id,
+        module_type: moduleType,
+        started_at: now,
+        updated_at: now,
+      }, {
+        onConflict: 'user_id,module_type'
+      })
+
+    if (error) {
+      if (error.code === 'PGRST205' || error.message?.includes('user_module_starts')) {
+        console.warn('user_module_starts table not found. Please run the migration.')
+        return false
+      }
+      console.error('Error starting module:', error)
+      return false
+    }
+
+    revalidatePath('/gamam-150')
+    revalidatePath('/coding')
+    revalidatePath('/system-design')
+    revalidatePath('/object-oriented-design')
+    revalidatePath('/schema-design')
+    revalidatePath('/api-design')
+    revalidatePath('/behavioral')
+    return true
+  } catch (error: any) {
+    console.error('Error in startModule:', error)
+    return false
+  }
+}
+
+/**
+ * Check if a module has been started by the current user
+ * @param moduleType - The module type (e.g., 'Coding', 'System Design', 'all' for GAMAM 150)
+ */
+export async function isModuleStarted(moduleType: string): Promise<boolean> {
+  try {
+    const supabase = await createClient()
+    
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) {
+      return false
+    }
+
+    const { data, error } = await supabase
+      .from('user_module_starts')
+      .select('id')
+      .eq('user_id', user.id)
+      .eq('module_type', moduleType)
+      .single()
+
+    if (error) {
+      if (error.code === 'PGRST205' || error.message?.includes('user_module_starts')) {
+        // Table doesn't exist yet, return false
+        return false
+      }
+      if (error.code === 'PGRST116') {
+        // No rows returned, module not started
+        return false
+      }
+      console.error('Error checking module start:', error)
+      return false
+    }
+
+    return !!data
+  } catch (error: any) {
+    console.error('Error in isModuleStarted:', error)
+    return false
+  }
+}
+
+/**
+ * Get all module starts for the current user
+ */
+export async function getUserModuleStarts(): Promise<Record<string, boolean>> {
+  try {
+    const supabase = await createClient()
+    
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) {
+      return {}
+    }
+
+    const { data, error } = await supabase
+      .from('user_module_starts')
+      .select('module_type')
+      .eq('user_id', user.id)
+
+    if (error) {
+      if (error.code === 'PGRST205' || error.message?.includes('user_module_starts')) {
+        // Table doesn't exist yet, return empty
+        return {}
+      }
+      console.error('Error fetching module starts:', error)
+      return {}
+    }
+
+    const startsMap: Record<string, boolean> = {}
+    data?.forEach((row) => {
+      startsMap[row.module_type] = true
+    })
+
+    return startsMap
+  } catch (error: any) {
+    console.error('Error in getUserModuleStarts:', error)
+    return {}
+  }
+}

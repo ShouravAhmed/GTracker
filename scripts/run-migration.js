@@ -116,13 +116,23 @@ async function runMigration() {
   }
 
   // Read migration file
-  const migrationPath = path.join(__dirname, '..', 'supabase', 'migrations', '001_create_user_solves.sql')
+  const migrationFileName = '001_initial_schema.sql'
+  const migrationPath = path.join(__dirname, '..', 'supabase', 'migrations', migrationFileName)
   let migrationSQL
 
   try {
     migrationSQL = fs.readFileSync(migrationPath, 'utf-8')
+    console.log(`📄 Reading migration: ${migrationFileName}`)
   } catch (error) {
     console.error(`❌ Error: Could not read migration file at ${migrationPath}`)
+    console.error(`   Available migrations:`)
+    const migrationsDir = path.join(__dirname, '..', 'supabase', 'migrations')
+    try {
+      const files = fs.readdirSync(migrationsDir).filter(f => f.endsWith('.sql'))
+      files.forEach(f => console.error(`   - ${f}`))
+    } catch (e) {
+      // Ignore
+    }
     process.exit(1)
   }
 
@@ -170,13 +180,16 @@ async function runMigration() {
 
     console.log('✅ Migration executed successfully!')
     console.log('')
-    console.log('🎉 Migration complete! The user_solves table has been created.')
-    console.log('   You can now use the app with Supabase backend.')
+    console.log('🎉 Migration complete! All tables have been created:')
+    console.log('   - 150DayProblems (stores all problems)')
+    console.log('   - user_solves (tracks user progress on problems)')
+    console.log('   - user_module_starts (tracks when users start modules)')
     console.log('')
     console.log('   Next steps:')
     console.log('   1. Restart your dev server (npm run dev)')
-    console.log('   2. Try marking a problem as solved')
-    console.log('   3. Check Supabase Dashboard > Table Editor > user_solves to see the data')
+    console.log('   2. Run: npm run upload-150day-problems (to populate problems)')
+    console.log('   3. Try starting a module from the home page or category page')
+    console.log('   4. Check Supabase Dashboard > Table Editor to see the data')
 
   } catch (error) {
     console.error('❌ Error running migration:')

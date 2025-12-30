@@ -30,6 +30,7 @@ export default function GamamCategory({ categoryName }: GamamCategoryProps) {
     problems,
     solves,
     solveCounts,
+    moduleStarts,
     loading: solvesLoading,
     isAuthenticated,
     getProblemStatus,
@@ -39,6 +40,8 @@ export default function GamamCategory({ categoryName }: GamamCategoryProps) {
     updateFocusTime,
     updateNote,
     triggerLogin,
+    startModule,
+    checkModuleStarted,
   } = useSolves()
 
   const [categoryProblems, setCategoryProblems] = useState<DBProblem[]>([])
@@ -198,6 +201,32 @@ export default function GamamCategory({ categoryName }: GamamCategoryProps) {
     return categoryProblems.filter(problem => getProblemStatus(problem.id)).length
   }, [categoryProblems, solves])
 
+  // Check if module has been started using module start tracking
+  const moduleType = categoryToTypeMap[categoryName]
+  const moduleHasStarted = useMemo(() => {
+    return checkModuleStarted(moduleType)
+  }, [moduleType, checkModuleStarted, moduleStarts])
+
+  // Get first problem ID for starting the module
+  const firstProblemId = useMemo(() => {
+    return categoryProblems.length > 0 ? categoryProblems[0].id : undefined
+  }, [categoryProblems])
+
+  const handleStartModule = async () => {
+    if (!isAuthenticated) {
+      await triggerLogin()
+      return
+    }
+
+    // Start the module in the database
+    await startModule(moduleType)
+    
+    // Also start the first problem
+    if (firstProblemId) {
+      await startProblem(firstProblemId)
+    }
+  }
+
   // Show skeleton loader when data is loading or problems haven't loaded yet
   if (solvesLoading || categoryProblems.length === 0) {
     return <SkeletonLoader />
@@ -209,6 +238,29 @@ export default function GamamCategory({ categoryName }: GamamCategoryProps) {
         <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-center text-gray-900 dark:text-white mb-6 sm:mb-10">
           {categoryToTypeMap[categoryName]}
         </h1>
+
+        {/* Start Module Banner - shown when module hasn't been started */}
+        {!moduleHasStarted && (
+          <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4 sm:p-6 mb-6">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div className="flex-1">
+                <h3 className="text-lg font-semibold text-yellow-800 dark:text-yellow-200 mb-1">
+                  Start the module to begin practicing
+                </h3>
+                <p className="text-sm text-yellow-700 dark:text-yellow-300">
+                  Click the button below to start this module. Once started, all features will be enabled.
+                </p>
+              </div>
+              <button
+                onClick={handleStartModule}
+                className="flex items-center gap-2 px-6 py-3 bg-yellow-600 hover:bg-yellow-700 dark:bg-yellow-500 dark:hover:bg-yellow-600 text-white rounded-lg font-semibold transition-colors whitespace-nowrap"
+              >
+                <Play size={18} />
+                Start Module
+              </button>
+            </div>
+          </div>
+        )}
 
         <div className="flex justify-end p-4 sm:p-6 bg-gray-50 dark:bg-gray-800 rounded-lg shadow-md mb-6">
           <div className="flex flex-col items-end">
@@ -274,7 +326,7 @@ export default function GamamCategory({ categoryName }: GamamCategoryProps) {
                         </div>
                       </div>
                       {/* Solving time column */}
-                      <div className="relative">
+                      <div className={`relative ${!moduleHasStarted ? 'blur-sm' : ''}`}>
                         <div className="flex flex-col gap-0.5">
                           <div className="grid grid-cols-3 gap-0.5">
                             {(() => {
@@ -306,7 +358,7 @@ export default function GamamCategory({ categoryName }: GamamCategoryProps) {
                         </div>
                       </div>
                       {/* Focus time column */}
-                      <div className="relative">
+                      <div className={`relative ${!moduleHasStarted ? 'blur-sm' : ''}`}>
                         <div className="flex flex-col gap-0.5">
                           <div className="grid grid-cols-3 gap-0.5">
                             {(() => {
@@ -338,7 +390,7 @@ export default function GamamCategory({ categoryName }: GamamCategoryProps) {
                         </div>
                       </div>
                       {/* Type/Difficulty column */}
-                      <div className="relative">
+                      <div className={`relative ${!moduleHasStarted ? 'blur-sm' : ''}`}>
                         {(problem.type || problem.difficulty) && (
                           <button
                             className={`px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all duration-200 backdrop-blur-md border shadow-sm ${getGlassMorphismStyles(problem.difficulty)}`}
@@ -350,16 +402,22 @@ export default function GamamCategory({ categoryName }: GamamCategoryProps) {
                         )}
                       </div>
                       {/* Focus button column */}
-                      <div className="relative">
+                      <div className={`relative ${!moduleHasStarted ? 'blur-sm' : ''}`}>
                         <button
                           onClick={async () => {
+                            if (!moduleHasStarted) return
                             if (!isAuthenticated) {
                               await triggerLogin()
                               return
                             }
                             toggleFocus(problem.id)
                           }}
-                          className="flex flex-col items-center justify-center gap-0.5 px-2 py-1 hover:opacity-70 transition-opacity"
+                          disabled={!moduleHasStarted}
+                          className={`flex flex-col items-center justify-center gap-0.5 px-2 py-1 transition-opacity ${
+                            moduleHasStarted 
+                              ? 'hover:opacity-70 cursor-pointer' 
+                              : 'opacity-50 cursor-not-allowed'
+                          }`}
                           title="Focus timer"
                         >
                           <Timer size={24} className="text-gray-700 dark:text-gray-300" />
@@ -367,16 +425,22 @@ export default function GamamCategory({ categoryName }: GamamCategoryProps) {
                         </button>
                       </div>
                       {/* Note button column */}
-                      <div className="relative">
+                      <div className={`relative ${!moduleHasStarted ? 'blur-sm' : ''}`}>
                         <button
                           onClick={async () => {
+                            if (!moduleHasStarted) return
                             if (!isAuthenticated) {
                               await triggerLogin()
                               return
                             }
                             toggleNote(problem.id)
                           }}
-                          className="flex flex-col items-center justify-center gap-0.5 px-2 py-1 hover:opacity-70 transition-opacity"
+                          disabled={!moduleHasStarted}
+                          className={`flex flex-col items-center justify-center gap-0.5 px-2 py-1 transition-opacity ${
+                            moduleHasStarted 
+                              ? 'hover:opacity-70 cursor-pointer' 
+                              : 'opacity-50 cursor-not-allowed'
+                          }`}
                           title="Edit note"
                         >
                           <NotepadText 
@@ -387,13 +451,21 @@ export default function GamamCategory({ categoryName }: GamamCategoryProps) {
                         </button>
                       </div>
                       {/* State button column */}
-                      <div className="relative">
+                      <div className={`relative ${!moduleHasStarted ? 'blur-sm' : ''}`}>
                         {solvesLoading && isAuthenticated ? (
                           <button
                             disabled
                             className="w-full min-h-[32px] sm:min-h-[36px] flex items-center justify-center px-3 sm:px-4 py-1.5 sm:py-2 rounded-full text-xs sm:text-sm font-bold text-white transition-colors bg-gray-500 dark:bg-gray-500 cursor-not-allowed"
                           >
                             Loading...
+                          </button>
+                        ) : !moduleHasStarted ? (
+                          <button
+                            disabled
+                            className="w-full min-h-[32px] sm:min-h-[36px] flex items-center justify-center gap-1 px-3 sm:px-4 py-1.5 sm:py-2 bg-gray-400 dark:bg-gray-600 text-white rounded-full text-xs sm:text-sm font-bold cursor-not-allowed opacity-50"
+                          >
+                            <Play size={14} />
+                            Start
                           </button>
                         ) : !hasStarted ? (
                           <button
@@ -549,6 +621,14 @@ export default function GamamCategory({ categoryName }: GamamCategoryProps) {
                                 >
                                   Loading...
                                 </button>
+                              ) : !moduleHasStarted ? (
+                                <button
+                                  disabled
+                                  className="w-full min-h-[32px] flex items-center justify-center gap-1 px-3 py-1.5 bg-gray-400 dark:bg-gray-600 text-white rounded-full text-xs font-bold cursor-not-allowed opacity-50"
+                                >
+                                  <Play size={12} />
+                                  Start
+                                </button>
                               ) : !hasStarted ? (
                                 <button
                                   onClick={async () => {
@@ -609,37 +689,49 @@ export default function GamamCategory({ categoryName }: GamamCategoryProps) {
                       {/* Middle Column: Focus Timer */}
                       <div className="flex flex-col">
                         <div className="h-full bg-gray-50 dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
-                          <InlinePomodoroTimer
-                            problemId={problem.id}
-                            problemName={problem.name}
-                            onComplete={(seconds) => handleFocusTimeComplete(problem.id, seconds)}
-                            onUpdate={(seconds) => handleFocusTimeUpdate(problem.id, seconds)}
-                            onElapsedChange={(seconds) => {
-                              setFocusTimeElapsed(prev => ({ ...prev, [problem.id]: seconds }))
-                              setLastSavedTimes(prev => {
-                                if (!prev[problem.id]) {
-                                  return { ...prev, [problem.id]: 0 }
-                                }
-                                return prev
-                              })
-                            }}
-                            onClose={async () => {
-                              await handleCloseFocusView(problem.id)
-                            }}
-                          />
+                          {moduleHasStarted ? (
+                            <InlinePomodoroTimer
+                              problemId={problem.id}
+                              problemName={problem.name}
+                              onComplete={(seconds) => handleFocusTimeComplete(problem.id, seconds)}
+                              onUpdate={(seconds) => handleFocusTimeUpdate(problem.id, seconds)}
+                              onElapsedChange={(seconds) => {
+                                setFocusTimeElapsed(prev => ({ ...prev, [problem.id]: seconds }))
+                                setLastSavedTimes(prev => {
+                                  if (!prev[problem.id]) {
+                                    return { ...prev, [problem.id]: 0 }
+                                  }
+                                  return prev
+                                })
+                              }}
+                              onClose={async () => {
+                                await handleCloseFocusView(problem.id)
+                              }}
+                            />
+                          ) : (
+                            <div className="flex items-center justify-center h-full text-gray-500 dark:text-gray-400 text-sm">
+                              Start the module to use focus timer
+                            </div>
+                          )}
                         </div>
                       </div>
                       
                       {/* Right Column: Note Editor */}
                       <div className="flex flex-col">
                         <div className="h-full bg-gray-50 dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
-                          <InlineNoteEditor
-                            problemId={problem.id}
-                            initialContent={getUserSolve(problem.id)?.note || ''}
-                            onSave={(content) => handleNoteSave(problem.id, content)}
-                            onClose={() => setExpandedProblem(null)}
-                            problemName={problem.name}
-                          />
+                          {moduleHasStarted ? (
+                            <InlineNoteEditor
+                              problemId={problem.id}
+                              initialContent={getUserSolve(problem.id)?.note || ''}
+                              onSave={(content) => handleNoteSave(problem.id, content)}
+                              onClose={() => setExpandedProblem(null)}
+                              problemName={problem.name}
+                            />
+                          ) : (
+                            <div className="flex items-center justify-center h-full text-gray-500 dark:text-gray-400 text-sm">
+                              Start the module to add notes
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>

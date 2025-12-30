@@ -11,6 +11,9 @@ import {
   startProblem as startProblemServer,
   updateFocusTime as updateFocusTimeServer,
   updateProblemNote as updateProblemNoteServer,
+  startModule as startModuleServer,
+  isModuleStarted as isModuleStartedServer,
+  getUserModuleStarts,
   type Problem,
   type UserSolve,
 } from './supabase/solves'
@@ -19,6 +22,7 @@ import {
 let problemsCache: Problem[] | null = null
 let solvesCache: Record<string, UserSolve> | null = null
 let solveCountsCache: Record<string, number> | null = null
+let moduleStartsCache: Record<string, boolean> | null = null
 let cacheTimestamp: number = 0
 const CACHE_DURATION = 5 * 60 * 1000 // 5 minutes
 
@@ -30,30 +34,10 @@ export function useSolves() {
   const [solves, setSolves] = useState<Record<string, UserSolve>>({})
   const [problems, setProblems] = useState<Problem[]>([])
   const [solveCounts, setSolveCounts] = useState<Record<string, number>>({})
+  const [moduleStarts, setModuleStarts] = useState<Record<string, boolean>>({})
   const [loading, setLoading] = useState(true)
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const supabase = createClient()
-
-  // Check authentication status
-  useEffect(() => {
-    const checkAuth = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      setIsAuthenticated(!!user)
-    }
-    checkAuth()
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setIsAuthenticated(!!session?.user)
-      if (session?.user) {
-        loadData()
-      } else {
-        setSolves({})
-        setLoading(false)
-      }
-    })
-
-    return () => subscription.unsubscribe()
-  }, [supabase.auth])
 
   // Load all data (problems, solves, counts) with caching
   const loadData = useCallback(async () => {
@@ -62,10 +46,11 @@ export function useSolves() {
       
       // Check cache first
       const now = Date.now()
-      if (problemsCache && solvesCache && solveCountsCache && (now - cacheTimestamp) < CACHE_DURATION) {
+      if (problemsCache && solvesCache && solveCountsCache && moduleStartsCache && (now - cacheTimestamp) < CACHE_DURATION) {
         setProblems(problemsCache)
         setSolves(solvesCache)
         setSolveCounts(solveCountsCache)
+        setModuleStarts(moduleStartsCache)
         setLoading(false)
         return
       }
@@ -74,14 +59,39 @@ export function useSolves() {
       const allProblems = await getAllProblems()
       problemsCache = allProblems
       setProblems(allProblems)
+      
+      if (allProblems.length === 0) {
+        console.warn('⚠️ No problems found in database. Please run: npm run upload-150day-problems')
+      } else {
+        console.log(`✅ Loaded ${allProblems.length} problems from database`)
+      }
 
       // Load solve counts (always load, but cache)
       const counts = await getProblemSolveCounts()
       solveCountsCache = counts
       setSolveCounts(counts)
 
-      // Load solves if authenticated
+      // Check authentication once
       const { data: { user } } = await supabase.auth.getUser()
+      
+      // Load module starts if authenticated
+      if (user) {
+        try {
+          const starts = await getUserModuleStarts()
+          moduleStartsCache = starts
+          setModuleStarts(starts)
+        } catch (error) {
+          console.error('Error loading module starts:', error)
+          // Continue even if module starts fail - table might not exist yet
+          moduleStartsCache = {}
+          setModuleStarts({})
+        }
+      } else {
+        moduleStartsCache = {}
+        setModuleStarts({})
+      }
+
+      // Load solves if authenticated
       if (user) {
         const userSolves = await getUserSolves()
         
@@ -120,6 +130,8 @@ export function useSolves() {
       } else {
         solvesCache = {}
         setSolves({})
+        moduleStartsCache = {}
+        setModuleStarts({})
       }
 
       cacheTimestamp = now
@@ -130,10 +142,25 @@ export function useSolves() {
     }
   }, [supabase.auth])
 
-  // Load data on mount and when auth changes
+  // Check authentication status and load data
   useEffect(() => {
+    const checkAuth = async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+      setIsAuthenticated(!!user)
+    }
+    checkAuth()
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setIsAuthenticated(!!session?.user)
+      // Always reload data when auth state changes
+      loadData()
+    })
+
+    // Load data on mount
     loadData()
-  }, [loadData])
+
+    return () => subscription.unsubscribe()
+  }, [supabase.auth, loadData])
 
   // Get problem status
   const getProblemStatus = useCallback((problemId: string): boolean => {
@@ -449,10 +476,36 @@ export function useSolves() {
     }
   }, [supabase.auth])
 
+  // Start module
+  const startModule = useCallback(async (moduleType: string): Promise<boolean> => {
+    try {
+      if (isAuthenticated) {
+        const success = await startModuleServer(moduleType)
+        if (success) {
+          // Optimistically update UI
+          setModuleStarts(prev => ({ ...prev, [moduleType]: true }))
+          moduleStartsCache = { ...moduleStartsCache, [moduleType]: true }
+          cacheTimestamp = Date.now()
+        }
+        return success
+      }
+      return false
+    } catch (error) {
+      console.error('Error starting module:', error)
+      return false
+    }
+  }, [isAuthenticated])
+
+  // Check if module is started
+  const checkModuleStarted = useCallback((moduleType: string): boolean => {
+    return moduleStarts[moduleType] ?? false
+  }, [moduleStarts])
+
   return {
     problems,
     solves,
     solveCounts,
+    moduleStarts,
     loading,
     isAuthenticated,
     getProblemStatus,
@@ -463,6 +516,8 @@ export function useSolves() {
     updateFocusTime,
     updateNote,
     triggerLogin,
+    startModule,
+    checkModuleStarted,
     refreshData: loadData,
   }
 }
