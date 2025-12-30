@@ -596,12 +596,11 @@ export async function getModuleProgress(): Promise<ModuleProgress | null> {
       return null
     }
 
-    // Get all problems grouped by day
+    // Get all problems (including those without day assignment for Day 127-150)
     const { data: problems, error: problemsError } = await supabase
       .from('150DayProblems')
       .select('id, day')
-      .not('day', 'is', null)
-      .order('day', { ascending: true })
+      .order('day', { ascending: true, nullsFirst: false })
 
     if (problemsError || !problems) {
       return null
@@ -622,15 +621,26 @@ export async function getModuleProgress(): Promise<ModuleProgress | null> {
     
     // Group problems by day and check completion
     const daysMap = new Map<number, { total: number; solved: number }>()
+    let otherProblemsCount = 0
+    let otherProblemsSolved = 0
+    
     problems.forEach(problem => {
-      const day = problem.day!
-      if (!daysMap.has(day)) {
-        daysMap.set(day, { total: 0, solved: 0 })
-      }
-      const dayData = daysMap.get(day)!
-      dayData.total++
-      if (solvedProblemIds.has(problem.id)) {
-        dayData.solved++
+      if (problem.day === null || problem.day === undefined) {
+        // Problems without day assignment belong to "Day 127-150"
+        otherProblemsCount++
+        if (solvedProblemIds.has(problem.id)) {
+          otherProblemsSolved++
+        }
+      } else {
+        const day = problem.day
+        if (!daysMap.has(day)) {
+          daysMap.set(day, { total: 0, solved: 0 })
+        }
+        const dayData = daysMap.get(day)!
+        dayData.total++
+        if (solvedProblemIds.has(problem.id)) {
+          dayData.solved++
+        }
       }
     })
 
@@ -640,8 +650,20 @@ export async function getModuleProgress(): Promise<ModuleProgress | null> {
       .map(([day]) => day)
       .sort((a, b) => a - b)
 
-    const completedDaysCount = completedDays.length
-    const totalDays = daysMap.size
+    // Check if "Day 127-150" is completed (all problems in that section are solved)
+    const otherSectionCompleted = otherProblemsCount > 0 && otherProblemsSolved === otherProblemsCount
+    
+    // Count days with specific assignments + Day 127-150 section
+    // Day 127-150 represents 24 days (days 127, 128, ..., 150)
+    const daysWithSpecificDay = daysMap.size
+    const day127To150Count = otherProblemsCount > 0 ? 24 : 0 // Day 127-150 represents 24 days
+    const totalDays = 150 // Always 150 days total for GAMAM 150 challenge
+    
+    // If "Day 127-150" section is completed, add the remaining days to reach 150 total
+    // This ensures we never exceed 150 completed days
+    const completedFromSpecificDays = completedDays.length
+    const remainingDaysFor150 = totalDays - daysWithSpecificDay
+    const completedDaysCount = completedFromSpecificDays + (otherSectionCompleted ? remainingDaysFor150 : 0)
 
     // Calculate expected day based on start date
     // Day 0 should be completed by end of day 1, day 1 by end of day 2, etc.
@@ -650,12 +672,16 @@ export async function getModuleProgress(): Promise<ModuleProgress | null> {
     const daysSinceStart = Math.floor((now.getTime() - startedAt.getTime()) / (1000 * 60 * 60 * 24))
     // Expected day is the day they should be working on (daysSinceStart)
     // Days 0 to (expectedDay - 1) should be completed
-    const expectedDay = Math.min(daysSinceStart, totalDays) // Can be up to totalDays (working on last day)
+    const expectedDay = Math.min(daysSinceStart, totalDays - 1) // Can be up to totalDays - 1 (0-indexed, so max is 149)
 
     // Find current day (highest completed day + 1, or expected day if no progress)
     const highestCompletedDay = completedDays.length > 0 
       ? Math.max(...completedDays) 
       : -1
+    
+    // Check if we're in the Day 127-150 range
+    const isInOtherSection = expectedDay >= 127 && expectedDay < 150
+    
     const currentDay = Math.max(
       highestCompletedDay + 1, 
       expectedDay, 
@@ -665,7 +691,7 @@ export async function getModuleProgress(): Promise<ModuleProgress | null> {
     // Calculate overdue days (days that should be completed but aren't)
     // Days 0 to (expectedDay - 1) should be completed
     const overdueDays: number[] = []
-    for (let day = 0; day < expectedDay; day++) {
+    for (let day = 0; day < expectedDay && day < 127; day++) {
       if (!completedDays.includes(day)) {
         const dayData = daysMap.get(day)
         if (dayData && dayData.total > 0) {
@@ -673,6 +699,16 @@ export async function getModuleProgress(): Promise<ModuleProgress | null> {
         }
       }
     }
+    
+    // Check if Day 127-150 section is overdue (expected day is >= 127 but section not completed)
+    if (expectedDay >= 127 && !otherSectionCompleted && otherProblemsCount > 0) {
+      // Count overdue days in the 127-150 range
+      // If expectedDay is 130, then days 127, 128, 129 are overdue
+      for (let day = 127; day < expectedDay && day < 150; day++) {
+        overdueDays.push(day)
+      }
+    }
+    
     const overdueDaysCount = overdueDays.length
 
     // Calculate percentages

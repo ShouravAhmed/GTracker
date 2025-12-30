@@ -50,6 +50,9 @@ export function useSolves() {
     },
     staleTime: 5 * 60 * 1000, // 5 minutes
     gcTime: 30 * 60 * 1000, // 30 minutes
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+    refetchOnReconnect: false,
   })
 
   // Fetch problems (cached for 30 minutes - problems rarely change)
@@ -69,6 +72,9 @@ export function useSolves() {
     },
     staleTime: 30 * 60 * 1000, // 30 minutes - problems rarely change
     gcTime: 60 * 60 * 1000, // 1 hour
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+    refetchOnReconnect: false,
   })
 
   // Fetch solve counts (cached for 10 minutes)
@@ -83,6 +89,9 @@ export function useSolves() {
     staleTime: 10 * 60 * 1000, // 10 minutes
     gcTime: 30 * 60 * 1000, // 30 minutes
     enabled: true, // Always fetch (public data)
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+    refetchOnReconnect: false,
   })
 
   // Fetch user solves (cached for 5 minutes, but can be optimistically updated)
@@ -100,6 +109,9 @@ export function useSolves() {
     staleTime: 5 * 60 * 1000, // 5 minutes
     gcTime: 30 * 60 * 1000, // 30 minutes
     enabled: isAuthenticated !== undefined, // Wait for auth check
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+    refetchOnReconnect: false,
   })
 
   // Fetch module starts (cached for 10 minutes)
@@ -122,9 +134,13 @@ export function useSolves() {
     staleTime: 10 * 60 * 1000, // 10 minutes
     gcTime: 30 * 60 * 1000, // 30 minutes
     enabled: isAuthenticated !== undefined && isAuthenticated,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+    refetchOnReconnect: false,
   })
 
   // Fetch module progress for GAMAM 150 (cached for 5 minutes)
+  // Only refetches when invalidated by mutations (e.g., when problem status changes)
   const {
     data: moduleProgress = null,
     isLoading: progressLoading,
@@ -139,7 +155,10 @@ export function useSolves() {
     staleTime: 5 * 60 * 1000, // 5 minutes
     gcTime: 30 * 60 * 1000, // 30 minutes
     enabled: isAuthenticated !== undefined && isAuthenticated,
-    refetchInterval: 60 * 1000, // Refetch every minute to update overdue calculations
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+    refetchOnReconnect: false,
+    // No refetchInterval - only refetch when invalidated by mutations
   })
 
   // Set up auth state listener
@@ -210,7 +229,7 @@ export function useSolves() {
       }
     },
     onSettled: () => {
-      // Refetch to ensure consistency
+      // Only invalidate if mutation succeeded - optimistic update already handled UI
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.userSolves })
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.moduleProgress })
     },
@@ -277,7 +296,9 @@ export function useSolves() {
       }
     },
     onSettled: () => {
+      // Only invalidate if mutation succeeded - optimistic update already handled UI
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.userSolves })
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.moduleProgress })
     },
   })
 
@@ -463,10 +484,15 @@ export function useSolves() {
     },
     onSuccess: (success, moduleType) => {
       if (success) {
+        // Optimistically update module starts
         queryClient.setQueryData<Record<string, boolean>>(QUERY_KEYS.moduleStarts, (old = {}) => ({
           ...old,
           [moduleType]: true,
         }))
+        // Invalidate module progress since starting a module affects progress calculation
+        if (moduleType === 'all') {
+          queryClient.invalidateQueries({ queryKey: QUERY_KEYS.moduleProgress })
+        }
       }
     },
   })

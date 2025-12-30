@@ -278,7 +278,7 @@ const materialSets: MaterialSet[] = [
 
 export default function Home() {
   const router = useRouter()
-  const { problems, solves, loading, isAuthenticated, getProblemStatus, startProblem, triggerLogin, moduleProgress } = useSolves()
+  const { problems, solves, loading, isAuthenticated, getProblemStatus, startProblem, triggerLogin, moduleProgress, moduleStarts, checkModuleStarted } = useSolves()
 
   // Debug logging
   useEffect(() => {
@@ -315,18 +315,25 @@ export default function Home() {
         // Calculate unique days (for GAMAM 150) or just count problems
         const uniqueDays = new Set<number>()
         let firstProblemId: string | undefined
+        let hasOtherProblems = false
 
         for (const problem of moduleProblems) {
           if (problem.day !== null && problem.day !== undefined) {
             uniqueDays.add(problem.day)
+          } else {
+            // Problems without day assignment belong to "Day 127-150"
+            hasOtherProblems = true
           }
           if (!firstProblemId) {
             firstProblemId = problem.id
           }
         }
 
-        // For GAMAM 150, show unique days; for others, show item count as "days"
-        const days = module.type === 'all' ? uniqueDays.size : moduleProblems.length
+        // For GAMAM 150, always show 150 days total (unique days with assignments + Day 127-150 section)
+        // For others, show item count as "days"
+        const days = module.type === 'all' 
+          ? 150 // Always 150 days total for GAMAM 150 challenge
+          : moduleProblems.length
         const items = moduleProblems.length
 
         // Calculate progress
@@ -481,6 +488,7 @@ export default function Home() {
                 const hasProgress = progress > 0
                 const isCompleted = progress === 100
                 const isGamam150 = module.id === 'gamam-150' && module.type === 'all'
+                const moduleHasStarted = checkModuleStarted(module.type)
 
                 return (
                   <div
@@ -585,27 +593,41 @@ export default function Home() {
                           </div>
                         ) : (
                           <div className="flex items-center gap-4 sm:gap-6">
-                            <div className="flex items-center gap-2.5 text-white/90">
-                              <div className="p-1.5 rounded-lg bg-white/10 backdrop-blur-sm">
-                                <Calendar size={16} className="text-white" />
+                            {module.type === 'all' ? (
+                              // For GAMAM 150, show both Days and Items
+                              <>
+                                <div className="flex items-center gap-2.5 text-white/90">
+                                  <div className="p-1.5 rounded-lg bg-white/10 backdrop-blur-sm">
+                                    <Calendar size={16} className="text-white" />
+                                  </div>
+                                  <div className="flex flex-col">
+                                    <span className="text-lg font-bold text-white">{days}</span>
+                                    <span className="text-xs text-white/70 font-medium">Days</span>
+                                  </div>
+                                </div>
+                                
+                                <div className="flex items-center gap-2.5 text-white/90">
+                                  <div className="p-1.5 rounded-lg bg-white/10 backdrop-blur-sm">
+                                    <FileText size={16} className="text-white" />
+                                  </div>
+                                  <div className="flex flex-col">
+                                    <span className="text-lg font-bold text-white">{items}</span>
+                                    <span className="text-xs text-white/70 font-medium">Total Items</span>
+                                  </div>
+                                </div>
+                              </>
+                            ) : (
+                              // For category cards, only show Total Items (days and items are the same)
+                              <div className="flex items-center gap-2.5 text-white/90">
+                                <div className="p-1.5 rounded-lg bg-white/10 backdrop-blur-sm">
+                                  <FileText size={16} className="text-white" />
+                                </div>
+                                <div className="flex flex-col">
+                                  <span className="text-lg font-bold text-white">{items}</span>
+                                  <span className="text-xs text-white/70 font-medium">Total Items</span>
+                                </div>
                               </div>
-                              <div className="flex flex-col">
-                                <span className="text-lg font-bold text-white">{days}</span>
-                                <span className="text-xs text-white/70 font-medium">
-                                  {module.type === 'all' ? 'Days' : 'Items'}
-                                </span>
-                              </div>
-                            </div>
-                            
-                            <div className="flex items-center gap-2.5 text-white/90">
-                              <div className="p-1.5 rounded-lg bg-white/10 backdrop-blur-sm">
-                                <FileText size={16} className="text-white" />
-                              </div>
-                              <div className="flex flex-col">
-                                <span className="text-lg font-bold text-white">{items}</span>
-                                <span className="text-xs text-white/70 font-medium">Total Items</span>
-                              </div>
-                            </div>
+                            )}
                           </div>
                         )}
                       </div>
@@ -674,7 +696,7 @@ export default function Home() {
                               <Play size={14} className="text-white ml-0.5" fill="white" />
                             </div>
                             <span className="text-sm font-semibold text-white flex-grow text-left">
-                              {hasProgress ? 'Continue' : 'Start'}
+                              {moduleHasStarted ? (hasProgress ? 'Continue' : 'View') : 'Start'}
                             </span>
                             <ArrowRight size={16} className="text-white/80 group-hover/btn:translate-x-1 transition-transform" />
                           </button>

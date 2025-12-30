@@ -233,43 +233,58 @@ export default function GamamCategory({ categoryName }: GamamCategoryProps) {
   }
 
   return (
-    <div className="min-h-screen bg-white dark:bg-gray-900 px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50 dark:from-gray-900 dark:via-gray-900 dark:to-gray-800 px-4 sm:px-6 lg:px-8 pt-6 sm:pt-8 pb-12 sm:pb-16">
       <div className="max-w-6xl mx-auto">
-        <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-center text-gray-900 dark:text-white mb-6 sm:mb-10">
-          {categoryToTypeMap[categoryName]}
-        </h1>
+        <div className="text-center mb-8 sm:mb-12">
+          <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 dark:from-blue-400 dark:via-purple-400 dark:to-pink-400 bg-clip-text text-transparent mb-2">
+            {categoryToTypeMap[categoryName]}
+          </h1>
+          <p className="text-sm sm:text-base text-gray-600 dark:text-gray-400 mt-2">
+            Master {categoryToTypeMap[categoryName]} problems
+          </p>
+        </div>
 
         {/* Start Module Banner - shown when module hasn't been started */}
         {!moduleHasStarted && (
-          <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4 sm:p-6 mb-6">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="relative overflow-hidden bg-gradient-to-r from-yellow-50 via-amber-50 to-yellow-50 dark:from-yellow-900/20 dark:via-amber-900/20 dark:to-yellow-900/20 border-2 border-yellow-200 dark:border-yellow-800 rounded-xl p-6 sm:p-8 mb-6 shadow-lg">
+            <div className="absolute inset-0 bg-gradient-to-r from-yellow-400/10 to-transparent"></div>
+            <div className="relative flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
               <div className="flex-1">
-                <h3 className="text-lg font-semibold text-yellow-800 dark:text-yellow-200 mb-1">
+                <h3 className="text-xl font-bold text-yellow-900 dark:text-yellow-100 mb-2 flex items-center gap-2">
+                  <span className="inline-block w-2 h-2 bg-yellow-500 rounded-full animate-pulse"></span>
                   Start the module to begin practicing
                 </h3>
-                <p className="text-sm text-yellow-700 dark:text-yellow-300">
+                <p className="text-sm text-yellow-800 dark:text-yellow-200">
                   Click the button below to start this module. Once started, all features will be enabled.
                 </p>
               </div>
               <button
                 onClick={handleStartModule}
-                className="flex items-center gap-2 px-6 py-3 bg-yellow-600 hover:bg-yellow-700 dark:bg-yellow-500 dark:hover:bg-yellow-600 text-white rounded-lg font-semibold transition-colors whitespace-nowrap"
+                className="group flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-yellow-500 to-amber-500 hover:from-yellow-600 hover:to-amber-600 dark:from-yellow-500 dark:to-amber-500 dark:hover:from-yellow-600 dark:hover:to-amber-600 text-white rounded-xl font-semibold transition-all duration-300 whitespace-nowrap shadow-lg hover:shadow-xl transform hover:scale-105 active:scale-95"
               >
-                <Play size={18} />
+                <Play size={18} className="group-hover:translate-x-0.5 transition-transform" />
                 Start Module
               </button>
             </div>
           </div>
         )}
 
-        <div className="flex justify-end p-4 sm:p-6 bg-gray-50 dark:bg-gray-800 rounded-lg shadow-md mb-6">
-          <div className="flex flex-col items-end">
-            <span className="text-sm sm:text-base text-gray-600 dark:text-gray-400">Total Solved</span>
-            <strong className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">{totalSolved}</strong>
+        <div className="relative overflow-hidden bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 rounded-xl p-6 border border-green-200/50 dark:border-green-800/50 shadow-lg mb-6">
+          <div className="absolute top-0 right-0 w-32 h-32 bg-green-400/10 rounded-full blur-2xl"></div>
+          <div className="relative flex justify-end">
+            <div className="flex flex-col items-end">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="p-2 bg-green-500/10 dark:bg-green-400/20 rounded-lg">
+                  <CheckCircle size={20} className="text-green-600 dark:text-green-400" />
+                </div>
+                <span className="text-sm font-semibold text-gray-600 dark:text-gray-400">Total Solved</span>
+              </div>
+              <strong className="text-3xl sm:text-4xl font-extrabold text-gray-900 dark:text-white">{totalSolved}</strong>
+            </div>
           </div>
         </div>
 
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 sm:p-6">
+        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-5 sm:p-7 border border-gray-200/50 dark:border-gray-700/50 mb-8 sm:mb-12">
           <div className="space-y-3">
             {categoryProblems.map((problem) => {
               const isSolved = getProblemStatus(problem.id)
@@ -303,7 +318,9 @@ export default function GamamCategory({ categoryName }: GamamCategoryProps) {
               return (
                 <div
                   key={problem.id}
-                  className="border-b border-gray-100 dark:border-gray-700 last:border-b-0 transition-all duration-300 ease-in-out"
+                  className={`border-b border-gray-100/80 dark:border-gray-700/80 last:border-b-0 transition-all duration-300 ease-in-out hover:bg-gray-50/50 dark:hover:bg-gray-700/30 rounded-lg px-2 py-1 ${
+                    isSolved ? 'bg-green-50/30 dark:bg-green-900/10' : isInProgress ? 'bg-blue-50/30 dark:bg-blue-900/10' : ''
+                  }`}
                 >
                   {!isExpanded ? (
                     // Normal collapsed view
@@ -419,15 +436,21 @@ export default function GamamCategory({ categoryName }: GamamCategoryProps) {
                             toggleFocus(problem.id)
                           }}
                           disabled={!moduleHasStarted}
-                          className={`flex flex-col items-center justify-center gap-0.5 px-2 py-1 transition-opacity ${
+                          className={`group flex flex-col items-center justify-center gap-0.5 px-3 py-2 rounded-lg transition-all ${
                             moduleHasStarted 
-                              ? 'hover:opacity-70 cursor-pointer' 
+                              ? 'hover:bg-blue-50 dark:hover:bg-blue-900/20 cursor-pointer hover:scale-105' 
                               : 'opacity-50 cursor-not-allowed'
                           }`}
                           title="Focus timer"
                         >
-                          <Timer size={24} className="text-gray-700 dark:text-gray-300" />
-                          <span className="text-[9px] leading-tight text-gray-600 dark:text-gray-400">focus</span>
+                          <div className={`p-1.5 rounded-lg transition-colors ${
+                            moduleHasStarted 
+                              ? 'bg-blue-100 dark:bg-blue-900/30 group-hover:bg-blue-200 dark:group-hover:bg-blue-900/50' 
+                              : 'bg-gray-100 dark:bg-gray-700'
+                          }`}>
+                            <Timer size={20} className="text-blue-600 dark:text-blue-400" />
+                          </div>
+                          <span className="text-[9px] leading-tight text-gray-600 dark:text-gray-400 font-medium">focus</span>
                         </button>
                       </div>
                       {/* Note button column */}
@@ -442,18 +465,26 @@ export default function GamamCategory({ categoryName }: GamamCategoryProps) {
                             toggleNote(problem.id)
                           }}
                           disabled={!moduleHasStarted}
-                          className={`flex flex-col items-center justify-center gap-0.5 px-2 py-1 transition-opacity ${
+                          className={`group flex flex-col items-center justify-center gap-0.5 px-3 py-2 rounded-lg transition-all ${
                             moduleHasStarted 
-                              ? 'hover:opacity-70 cursor-pointer' 
+                              ? 'hover:bg-green-50 dark:hover:bg-green-900/20 cursor-pointer hover:scale-105' 
                               : 'opacity-50 cursor-not-allowed'
                           }`}
                           title="Edit note"
                         >
-                          <NotepadText 
-                            size={24} 
-                            className={hasNote ? 'text-green-600 dark:text-green-400' : 'text-gray-700 dark:text-gray-300'} 
-                          />
-                          <span className="text-[9px] leading-tight text-gray-600 dark:text-gray-400">note</span>
+                          <div className={`p-1.5 rounded-lg transition-colors ${
+                            hasNote 
+                              ? 'bg-green-100 dark:bg-green-900/30 group-hover:bg-green-200 dark:group-hover:bg-green-900/50' 
+                              : moduleHasStarted
+                              ? 'bg-gray-100 dark:bg-gray-700 group-hover:bg-gray-200 dark:group-hover:bg-gray-600'
+                              : 'bg-gray-100 dark:bg-gray-700'
+                          }`}>
+                            <NotepadText 
+                              size={20} 
+                              className={hasNote ? 'text-green-600 dark:text-green-400' : 'text-gray-600 dark:text-gray-400'} 
+                            />
+                          </div>
+                          <span className="text-[9px] leading-tight text-gray-600 dark:text-gray-400 font-medium">note</span>
                         </button>
                       </div>
                       {/* State button column */}
@@ -482,9 +513,9 @@ export default function GamamCategory({ categoryName }: GamamCategoryProps) {
                               }
                               await handleStartProblem(problem.id)
                             }}
-                            className="w-full min-h-[32px] sm:min-h-[36px] flex items-center justify-center gap-1 px-3 sm:px-4 py-1.5 sm:py-2 bg-red-500 hover:bg-red-600 dark:bg-red-500 dark:hover:bg-red-600 text-white rounded-full text-xs sm:text-sm font-bold transition-colors"
+                            className="group w-full min-h-[32px] sm:min-h-[36px] flex items-center justify-center gap-1.5 px-3 sm:px-4 py-1.5 sm:py-2 bg-gradient-to-r from-red-500 to-rose-500 hover:from-red-600 hover:to-rose-600 dark:from-red-500 dark:to-rose-500 dark:hover:from-red-600 dark:hover:to-rose-600 text-white rounded-xl text-xs sm:text-sm font-bold transition-all duration-300 shadow-md hover:shadow-lg transform hover:scale-105 active:scale-95"
                           >
-                            <Play size={14} />
+                            <Play size={14} className="group-hover:translate-x-0.5 transition-transform" />
                             Start
                           </button>
                         ) : isInProgress ? (
@@ -496,7 +527,7 @@ export default function GamamCategory({ categoryName }: GamamCategoryProps) {
                               }
                               await updateProblemStatus(problem.id)
                             }}
-                            className="w-full min-h-[32px] sm:min-h-[36px] flex items-center justify-center gap-1 px-3 sm:px-4 py-1.5 sm:py-2 bg-blue-500 hover:bg-blue-600 dark:bg-blue-500 dark:hover:bg-blue-600 text-white rounded-full text-xs sm:text-sm font-bold transition-colors group animate-breathe"
+                            className="group w-full min-h-[32px] sm:min-h-[36px] flex items-center justify-center gap-1.5 px-3 sm:px-4 py-1.5 sm:py-2 bg-gradient-to-r from-blue-500 to-indigo-500 hover:from-blue-600 hover:to-indigo-600 dark:from-blue-500 dark:to-indigo-500 dark:hover:from-blue-600 dark:hover:to-indigo-600 text-white rounded-xl text-xs sm:text-sm font-bold transition-all duration-300 shadow-md hover:shadow-lg transform hover:scale-105 active:scale-95 animate-pulse"
                           >
                             <Clock size={14} />
                             <span className="group-hover:hidden whitespace-nowrap">In progress</span>
@@ -511,7 +542,7 @@ export default function GamamCategory({ categoryName }: GamamCategoryProps) {
                               }
                               await updateProblemStatus(problem.id)
                             }}
-                            className="w-full min-h-[32px] sm:min-h-[36px] flex items-center justify-center gap-1 px-3 sm:px-4 py-1.5 sm:py-2 rounded-full text-xs sm:text-sm font-bold text-white transition-colors bg-green-500 hover:bg-green-600 dark:bg-green-500 dark:hover:bg-green-600"
+                            className="w-full min-h-[32px] sm:min-h-[36px] flex items-center justify-center gap-1.5 px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl text-xs sm:text-sm font-bold text-white transition-all duration-300 bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 dark:from-green-500 dark:to-emerald-500 dark:hover:from-green-600 dark:hover:to-emerald-600 shadow-md hover:shadow-lg transform hover:scale-105 active:scale-95"
                           >
                             <CheckCircle size={14} />
                             Solved
