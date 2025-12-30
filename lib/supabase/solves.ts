@@ -456,6 +456,7 @@ export async function startModule(moduleType: string): Promise<boolean> {
         module_type: moduleType,
         started_at: now,
         updated_at: now,
+        current_day: moduleType === 'all' ? 0 : undefined, // Set current_day to 0 for GAMAM 150
       }, {
         onConflict: 'user_id,module_type'
       })
@@ -558,5 +559,219 @@ export async function getUserModuleStarts(): Promise<Record<string, boolean>> {
   } catch (error: any) {
     console.error('Error in getUserModuleStarts:', error)
     return {}
+  }
+}
+
+export interface ModuleProgress {
+  currentDay: number
+  completedDays: number
+  overdueDays: number
+  totalDays: number
+  completedPercentage: number
+  overduePercentage: number
+  startedAt?: string
+}
+
+/**
+ * Get progress for GAMAM 150 module (module_type = 'all')
+ */
+export async function getModuleProgress(): Promise<ModuleProgress | null> {
+  try {
+    const supabase = await createClient()
+    
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) {
+      return null
+    }
+
+    // Get module start info
+    const { data: moduleStart, error: moduleError } = await supabase
+      .from('user_module_starts')
+      .select('started_at, current_day')
+      .eq('user_id', user.id)
+      .eq('module_type', 'all')
+      .single()
+
+    if (moduleError || !moduleStart) {
+      return null
+    }
+
+    // Get all problems grouped by day
+    const { data: problems, error: problemsError } = await supabase
+      .from('150DayProblems')
+      .select('id, day')
+      .not('day', 'is', null)
+      .order('day', { ascending: true })
+
+    if (problemsError || !problems) {
+      return null
+    }
+
+    // Get user solves
+    const { data: solves, error: solvesError } = await supabase
+      .from('user_solves')
+      .select('problem_id, solved')
+      .eq('user_id', user.id)
+      .eq('solved', true)
+
+    if (solvesError) {
+      return null
+    }
+
+    const solvedProblemIds = new Set(solves?.map(s => s.problem_id) || [])
+    
+    // Group problems by day and check completion
+    const daysMap = new Map<number, { total: number; solved: number }>()
+    problems.forEach(problem => {
+      const day = problem.day!
+      if (!daysMap.has(day)) {
+        daysMap.set(day, { total: 0, solved: 0 })
+      }
+      const dayData = daysMap.get(day)!
+      dayData.total++
+      if (solvedProblemIds.has(problem.id)) {
+        dayData.solved++
+      }
+    })
+
+    // Calculate completed days (all problems in day are solved)
+    const completedDays = Array.from(daysMap.entries())
+      .filter(([_, data]) => data.solved === data.total && data.total > 0)
+      .map(([day]) => day)
+      .sort((a, b) => a - b)
+
+    const completedDaysCount = completedDays.length
+    const totalDays = daysMap.size
+
+    // Calculate expected day based on start date
+    // Day 0 should be completed by end of day 1, day 1 by end of day 2, etc.
+    const startedAt = new Date(moduleStart.started_at)
+    const now = new Date()
+    const daysSinceStart = Math.floor((now.getTime() - startedAt.getTime()) / (1000 * 60 * 60 * 24))
+    // Expected day is the day they should be working on (daysSinceStart)
+    // Days 0 to (expectedDay - 1) should be completed
+    const expectedDay = Math.min(daysSinceStart, totalDays) // Can be up to totalDays (working on last day)
+
+    // Find current day (highest completed day + 1, or expected day if no progress)
+    const highestCompletedDay = completedDays.length > 0 
+      ? Math.max(...completedDays) 
+      : -1
+    const currentDay = Math.max(
+      highestCompletedDay + 1, 
+      expectedDay, 
+      moduleStart.current_day !== null && moduleStart.current_day !== undefined ? moduleStart.current_day : 0
+    )
+
+    // Calculate overdue days (days that should be completed but aren't)
+    // Days 0 to (expectedDay - 1) should be completed
+    const overdueDays: number[] = []
+    for (let day = 0; day < expectedDay; day++) {
+      if (!completedDays.includes(day)) {
+        const dayData = daysMap.get(day)
+        if (dayData && dayData.total > 0) {
+          overdueDays.push(day)
+        }
+      }
+    }
+    const overdueDaysCount = overdueDays.length
+
+    // Calculate percentages
+    const completedPercentage = totalDays > 0 ? Math.round((completedDaysCount / totalDays) * 100) : 0
+    const overduePercentage = totalDays > 0 ? Math.round((overdueDaysCount / totalDays) * 100) : 0
+
+    return {
+      currentDay,
+      completedDays: completedDaysCount,
+      overdueDays: overdueDaysCount,
+      totalDays,
+      completedPercentage,
+      overduePercentage,
+      startedAt: moduleStart.started_at,
+    }
+  } catch (error: any) {
+    console.error('Error in getModuleProgress:', error)
+    return null
+  }
+}
+
+/**
+ * Get progress for a specific day
+ */
+export async function getDayProgress(day: number): Promise<{ completed: number; total: number; percentage: number } | null> {
+  try {
+    const supabase = await createClient()
+    
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) {
+      return null
+    }
+
+    // Get all problems for this day
+    const { data: problems, error: problemsError } = await supabase
+      .from('150DayProblems')
+      .select('id')
+      .eq('day', day)
+
+    if (problemsError || !problems) {
+      return null
+    }
+
+    const problemIds = problems.map(p => p.id)
+    const total = problemIds.length
+
+    if (total === 0) {
+      return { completed: 0, total: 0, percentage: 0 }
+    }
+
+    // Get solved problems for this day
+    const { data: solves, error: solvesError } = await supabase
+      .from('user_solves')
+      .select('problem_id')
+      .eq('user_id', user.id)
+      .eq('solved', true)
+      .in('problem_id', problemIds)
+
+    if (solvesError) {
+      return null
+    }
+
+    const completed = solves?.length || 0
+    const percentage = Math.round((completed / total) * 100)
+
+    return { completed, total, percentage }
+  } catch (error: any) {
+    console.error('Error in getDayProgress:', error)
+    return null
+  }
+}
+
+/**
+ * Update current day when a day is completed
+ */
+export async function updateCurrentDay(newDay: number): Promise<boolean> {
+  try {
+    const supabase = await createClient()
+    
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) {
+      return false
+    }
+
+    const { error } = await supabase
+      .from('user_module_starts')
+      .update({ current_day: newDay, updated_at: new Date().toISOString() })
+      .eq('user_id', user.id)
+      .eq('module_type', 'all')
+
+    if (error) {
+      console.error('Error updating current day:', error)
+      return false
+    }
+
+    revalidatePath('/gamam-150')
+    return true
+  } catch (error: any) {
+    console.error('Error in updateCurrentDay:', error)
+    return false
   }
 }

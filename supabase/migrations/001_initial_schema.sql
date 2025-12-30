@@ -42,6 +42,7 @@ DROP INDEX IF EXISTS idx_user_solves_problem_id;
 DROP INDEX IF EXISTS idx_user_solves_solved;
 DROP INDEX IF EXISTS idx_user_module_starts_user_id;
 DROP INDEX IF EXISTS idx_user_module_starts_module_type;
+DROP INDEX IF EXISTS idx_user_module_starts_current_day;
 
 DO $$
 BEGIN
@@ -126,6 +127,7 @@ BEGIN
     user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
     module_type TEXT NOT NULL, -- e.g., 'Coding', 'System Design', 'all' for GAMAM 150
     started_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    current_day INTEGER DEFAULT 0, -- Current day number (0-indexed) for GAMAM 150 module. Day 0 = first day after starting.
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     UNIQUE(user_id, module_type)
@@ -139,6 +141,7 @@ BEGIN
   RAISE NOTICE 'Creating indexes for user_module_starts...';
   CREATE INDEX idx_user_module_starts_user_id ON user_module_starts(user_id);
   CREATE INDEX idx_user_module_starts_module_type ON user_module_starts(module_type);
+  CREATE INDEX idx_user_module_starts_current_day ON user_module_starts(user_id, module_type, current_day);
   RAISE NOTICE 'Indexes for user_module_starts created successfully';
 END $$;
 
@@ -277,7 +280,7 @@ BEGIN
   RAISE NOTICE 'Created tables:';
   RAISE NOTICE '  - 150DayProblems (stores all problems)';
   RAISE NOTICE '  - user_solves (tracks user progress on problems)';
-  RAISE NOTICE '  - user_module_starts (tracks when users start modules)';
+  RAISE NOTICE '  - user_module_starts (tracks when users start modules with current_day progress)';
   RAISE NOTICE '';
   RAISE NOTICE 'Next steps:';
   RAISE NOTICE '1. Run: npm run upload-150day-problems (to populate problems)';

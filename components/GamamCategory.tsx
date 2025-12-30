@@ -308,25 +308,31 @@ export default function GamamCategory({ categoryName }: GamamCategoryProps) {
                   {!isExpanded ? (
                     // Normal collapsed view
                     <div className="grid grid-cols-1 sm:grid-cols-[40px_1fr_auto_auto_auto_auto_auto_140px] gap-2 sm:gap-4 items-center py-2 sm:py-3">
-                      <span className="text-center font-bold text-gray-700 dark:text-gray-300 text-sm sm:text-base">
+                      <span className={`text-center font-bold text-gray-700 dark:text-gray-300 text-sm sm:text-base ${!moduleHasStarted ? 'opacity-60' : ''}`}>
                         {categoryProblems.indexOf(problem) + 1}
                       </span>
-                      <div className="flex items-center gap-2 sm:gap-3">
-                        <a
-                          href={problem.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-blue-600 dark:text-blue-400 hover:underline text-sm sm:text-base truncate"
-                        >
-                          {problem.name}
-                        </a>
+                      <div className={`flex items-center gap-2 sm:gap-3 ${!moduleHasStarted ? 'opacity-60' : ''}`}>
+                        {moduleHasStarted ? (
+                          <a
+                            href={problem.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-600 dark:text-blue-400 hover:underline text-sm sm:text-base truncate"
+                          >
+                            {problem.name}
+                          </a>
+                        ) : (
+                          <span className="text-blue-600 dark:text-blue-400 text-sm sm:text-base truncate cursor-not-allowed">
+                            {problem.name}
+                          </span>
+                        )}
                         <div className="flex items-center gap-1 text-xs sm:text-sm text-gray-600 dark:text-gray-400">
                           <Users size={14} />
                           <span>{solveCount}</span>
                         </div>
                       </div>
                       {/* Solving time column */}
-                      <div className={`relative ${!moduleHasStarted ? 'blur-sm' : ''}`}>
+                      <div className={`relative ${!moduleHasStarted ? 'opacity-60' : ''}`}>
                         <div className="flex flex-col gap-0.5">
                           <div className="grid grid-cols-3 gap-0.5">
                             {(() => {
@@ -358,7 +364,7 @@ export default function GamamCategory({ categoryName }: GamamCategoryProps) {
                         </div>
                       </div>
                       {/* Focus time column */}
-                      <div className={`relative ${!moduleHasStarted ? 'blur-sm' : ''}`}>
+                      <div className={`relative ${!moduleHasStarted ? 'opacity-60' : ''}`}>
                         <div className="flex flex-col gap-0.5">
                           <div className="grid grid-cols-3 gap-0.5">
                             {(() => {
@@ -390,7 +396,7 @@ export default function GamamCategory({ categoryName }: GamamCategoryProps) {
                         </div>
                       </div>
                       {/* Type/Difficulty column */}
-                      <div className={`relative ${!moduleHasStarted ? 'blur-sm' : ''}`}>
+                      <div className={`relative ${!moduleHasStarted ? 'opacity-60' : ''}`}>
                         {(problem.type || problem.difficulty) && (
                           <button
                             className={`px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all duration-200 backdrop-blur-md border shadow-sm ${getGlassMorphismStyles(problem.difficulty)}`}
@@ -402,7 +408,7 @@ export default function GamamCategory({ categoryName }: GamamCategoryProps) {
                         )}
                       </div>
                       {/* Focus button column */}
-                      <div className={`relative ${!moduleHasStarted ? 'blur-sm' : ''}`}>
+                      <div className={`relative ${!moduleHasStarted ? 'opacity-60' : ''}`}>
                         <button
                           onClick={async () => {
                             if (!moduleHasStarted) return
@@ -425,7 +431,7 @@ export default function GamamCategory({ categoryName }: GamamCategoryProps) {
                         </button>
                       </div>
                       {/* Note button column */}
-                      <div className={`relative ${!moduleHasStarted ? 'blur-sm' : ''}`}>
+                      <div className={`relative ${!moduleHasStarted ? 'opacity-60' : ''}`}>
                         <button
                           onClick={async () => {
                             if (!moduleHasStarted) return
@@ -451,7 +457,7 @@ export default function GamamCategory({ categoryName }: GamamCategoryProps) {
                         </button>
                       </div>
                       {/* State button column */}
-                      <div className={`relative ${!moduleHasStarted ? 'blur-sm' : ''}`}>
+                      <div className={`relative ${!moduleHasStarted ? 'opacity-60' : ''}`}>
                         {solvesLoading && isAuthenticated ? (
                           <button
                             disabled
@@ -462,7 +468,7 @@ export default function GamamCategory({ categoryName }: GamamCategoryProps) {
                         ) : !moduleHasStarted ? (
                           <button
                             disabled
-                            className="w-full min-h-[32px] sm:min-h-[36px] flex items-center justify-center gap-1 px-3 sm:px-4 py-1.5 sm:py-2 bg-gray-400 dark:bg-gray-600 text-white rounded-full text-xs sm:text-sm font-bold cursor-not-allowed opacity-50"
+                            className="w-full min-h-[32px] sm:min-h-[36px] flex items-center justify-center gap-1 px-3 sm:px-4 py-1.5 sm:py-2 bg-gray-400 dark:bg-gray-600 text-white rounded-full text-xs sm:text-sm font-bold cursor-not-allowed opacity-60"
                           >
                             <Play size={14} />
                             Start
@@ -520,17 +526,26 @@ export default function GamamCategory({ categoryName }: GamamCategoryProps) {
                       <div className="flex items-center h-full">
                         <div className="flex flex-col gap-3 items-center justify-center w-full">
                           {/* First row: Problem title and difficulty */}
-                          <div className="flex flex-col gap-2 items-center">
+                          <div className={`flex flex-col gap-2 items-center ${!moduleHasStarted ? 'opacity-60' : ''}`}>
                             <div className="flex flex-col gap-2 items-center">
-                              <a
-                                href={problem.url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-blue-600 dark:text-blue-400 hover:underline text-xl sm:text-2xl font-semibold text-center font-mono tracking-wide"
-                                style={{ fontFamily: '"Roboto Mono", "Courier New", monospace' }}
-                              >
-                                {problem.name}
-                              </a>
+                              {moduleHasStarted ? (
+                                <a
+                                  href={problem.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-blue-600 dark:text-blue-400 hover:underline text-xl sm:text-2xl font-semibold text-center font-mono tracking-wide"
+                                  style={{ fontFamily: '"Roboto Mono", "Courier New", monospace' }}
+                                >
+                                  {problem.name}
+                                </a>
+                              ) : (
+                                <span
+                                  className="text-blue-600 dark:text-blue-400 text-xl sm:text-2xl font-semibold text-center font-mono tracking-wide cursor-not-allowed"
+                                  style={{ fontFamily: '"Roboto Mono", "Courier New", monospace' }}
+                                >
+                                  {problem.name}
+                                </span>
+                              )}
                               <div className="flex items-center gap-1 text-xs sm:text-sm text-gray-600 dark:text-gray-400">
                                 <Users size={14} />
                                 <span>{solveCount}</span>

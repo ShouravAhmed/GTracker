@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useCallback, useEffect } from 'react'
 import { createClient } from './supabase/client'
 import {
   getAllProblems,
@@ -14,153 +15,149 @@ import {
   startModule as startModuleServer,
   isModuleStarted as isModuleStartedServer,
   getUserModuleStarts,
+  getModuleProgress,
+  getDayProgress,
+  updateCurrentDay,
   type Problem,
   type UserSolve,
+  type ModuleProgress,
 } from './supabase/solves'
 
-// Cache for problems and solves
-let problemsCache: Problem[] | null = null
-let solvesCache: Record<string, UserSolve> | null = null
-let solveCountsCache: Record<string, number> | null = null
-let moduleStartsCache: Record<string, boolean> | null = null
-let cacheTimestamp: number = 0
-const CACHE_DURATION = 5 * 60 * 1000 // 5 minutes
+// Query keys
+const QUERY_KEYS = {
+  problems: ['problems'] as const,
+  solveCounts: ['solveCounts'] as const,
+  userSolves: ['userSolves'] as const,
+  moduleStarts: ['moduleStarts'] as const,
+  auth: ['auth'] as const,
+  moduleProgress: ['moduleProgress'] as const,
+  dayProgress: (day: number) => ['dayProgress', day] as const,
+}
 
 /**
- * Client-side hook for managing solves with Supabase
- * Includes frontend caching to avoid loading states
+ * Client-side hook for managing solves with TanStack Query for caching
  */
 export function useSolves() {
-  const [solves, setSolves] = useState<Record<string, UserSolve>>({})
-  const [problems, setProblems] = useState<Problem[]>([])
-  const [solveCounts, setSolveCounts] = useState<Record<string, number>>({})
-  const [moduleStarts, setModuleStarts] = useState<Record<string, boolean>>({})
-  const [loading, setLoading] = useState(true)
-  const [isAuthenticated, setIsAuthenticated] = useState(false)
+  const queryClient = useQueryClient()
   const supabase = createClient()
 
-  // Load all data (problems, solves, counts) with caching
-  const loadData = useCallback(async () => {
-    try {
-      setLoading(true)
-      
-      // Check cache first
-      const now = Date.now()
-      if (problemsCache && solvesCache && solveCountsCache && moduleStartsCache && (now - cacheTimestamp) < CACHE_DURATION) {
-        setProblems(problemsCache)
-        setSolves(solvesCache)
-        setSolveCounts(solveCountsCache)
-        setModuleStarts(moduleStartsCache)
-        setLoading(false)
-        return
-      }
+  // Check authentication
+  const { data: isAuthenticated = false } = useQuery({
+    queryKey: QUERY_KEYS.auth,
+    queryFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+      return !!user
+    },
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    gcTime: 30 * 60 * 1000, // 30 minutes
+  })
 
-      // Load problems (always load, but cache)
+  // Fetch problems (cached for 30 minutes - problems rarely change)
+  const {
+    data: problems = [],
+    isLoading: problemsLoading,
+  } = useQuery({
+    queryKey: QUERY_KEYS.problems,
+    queryFn: async () => {
       const allProblems = await getAllProblems()
-      problemsCache = allProblems
-      setProblems(allProblems)
-      
       if (allProblems.length === 0) {
         console.warn('⚠️ No problems found in database. Please run: npm run upload-150day-problems')
       } else {
         console.log(`✅ Loaded ${allProblems.length} problems from database`)
       }
+      return allProblems
+    },
+    staleTime: 30 * 60 * 1000, // 30 minutes - problems rarely change
+    gcTime: 60 * 60 * 1000, // 1 hour
+  })
 
-      // Load solve counts (always load, but cache)
-      const counts = await getProblemSolveCounts()
-      solveCountsCache = counts
-      setSolveCounts(counts)
+  // Fetch solve counts (cached for 10 minutes)
+  const {
+    data: solveCounts = {},
+    isLoading: countsLoading,
+  } = useQuery({
+    queryKey: QUERY_KEYS.solveCounts,
+    queryFn: async () => {
+      return await getProblemSolveCounts()
+    },
+    staleTime: 10 * 60 * 1000, // 10 minutes
+    gcTime: 30 * 60 * 1000, // 30 minutes
+    enabled: true, // Always fetch (public data)
+  })
 
-      // Check authentication once
-      const { data: { user } } = await supabase.auth.getUser()
-      
-      // Load module starts if authenticated
-      if (user) {
-        try {
-          const starts = await getUserModuleStarts()
-          moduleStartsCache = starts
-          setModuleStarts(starts)
-        } catch (error) {
-          console.error('Error loading module starts:', error)
-          // Continue even if module starts fail - table might not exist yet
-          moduleStartsCache = {}
-          setModuleStarts({})
-        }
-      } else {
-        moduleStartsCache = {}
-        setModuleStarts({})
+  // Fetch user solves (cached for 5 minutes, but can be optimistically updated)
+  const {
+    data: solves = {},
+    isLoading: solvesLoading,
+  } = useQuery({
+    queryKey: QUERY_KEYS.userSolves,
+    queryFn: async () => {
+      if (!isAuthenticated) {
+        return {}
       }
+      return await getUserSolves()
+    },
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    gcTime: 30 * 60 * 1000, // 30 minutes
+    enabled: isAuthenticated !== undefined, // Wait for auth check
+  })
 
-      // Load solves if authenticated
-      if (user) {
-        const userSolves = await getUserSolves()
-        
-        // Merge server data with current state to preserve in-progress problems
-        // This prevents losing in-progress state when tab becomes active again
-        setSolves(prevSolves => {
-          const merged: Record<string, UserSolve> = { ...userSolves }
-          
-          // Preserve local in-progress state if it exists and server doesn't have it or has stale data
-          for (const [problemId, localSolve] of Object.entries(prevSolves)) {
-            const serverSolve = userSolves[problemId]
-            const isLocalInProgress = localSolve.started_at && !localSolve.solved
-            
-            if (isLocalInProgress) {
-              // If local has in-progress state, check if server has it too
-              if (!serverSolve || !serverSolve.started_at || serverSolve.solved) {
-                // Server doesn't have in-progress state, preserve local state
-                merged[problemId] = localSolve
-              } else {
-                // Server has in-progress state, use server's started_at but keep local state
-                // This handles the case where server save completed
-                merged[problemId] = {
-                  ...localSolve,
-                  started_at: serverSolve.started_at,
-                  // Keep other local state like focus_time if it's more recent
-                  focus_time: Math.max(localSolve.focus_time || 0, serverSolve.focus_time || 0),
-                }
-              }
-            }
-          }
-          
-          // Update cache with merged data
-          solvesCache = merged
-          return merged
-        })
-      } else {
-        solvesCache = {}
-        setSolves({})
-        moduleStartsCache = {}
-        setModuleStarts({})
+  // Fetch module starts (cached for 10 minutes)
+  const {
+    data: moduleStarts = {},
+    isLoading: moduleStartsLoading,
+  } = useQuery({
+    queryKey: QUERY_KEYS.moduleStarts,
+    queryFn: async () => {
+      if (!isAuthenticated) {
+        return {}
       }
+      try {
+        return await getUserModuleStarts()
+      } catch (error) {
+        console.error('Error loading module starts:', error)
+        return {}
+      }
+    },
+    staleTime: 10 * 60 * 1000, // 10 minutes
+    gcTime: 30 * 60 * 1000, // 30 minutes
+    enabled: isAuthenticated !== undefined && isAuthenticated,
+  })
 
-      cacheTimestamp = now
-    } catch (error) {
-      console.error('Error loading data:', error)
-    } finally {
-      setLoading(false)
-    }
-  }, [supabase.auth])
+  // Fetch module progress for GAMAM 150 (cached for 5 minutes)
+  const {
+    data: moduleProgress = null,
+    isLoading: progressLoading,
+  } = useQuery({
+    queryKey: QUERY_KEYS.moduleProgress,
+    queryFn: async () => {
+      if (!isAuthenticated) {
+        return null
+      }
+      return await getModuleProgress()
+    },
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    gcTime: 30 * 60 * 1000, // 30 minutes
+    enabled: isAuthenticated !== undefined && isAuthenticated,
+    refetchInterval: 60 * 1000, // Refetch every minute to update overdue calculations
+  })
 
-  // Check authentication status and load data
+  // Set up auth state listener
   useEffect(() => {
-    const checkAuth = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      setIsAuthenticated(!!user)
-    }
-    checkAuth()
-
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setIsAuthenticated(!!session?.user)
-      // Always reload data when auth state changes
-      loadData()
+      // Invalidate queries when auth state changes
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.auth })
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.userSolves })
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.moduleStarts })
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.moduleProgress })
     })
 
-    // Load data on mount
-    loadData()
+    return () => {
+      subscription.unsubscribe()
+    }
+  }, [supabase.auth, queryClient])
 
-    return () => subscription.unsubscribe()
-  }, [supabase.auth, loadData])
+  const loading = problemsLoading || countsLoading || solvesLoading || moduleStartsLoading || progressLoading || progressLoading
 
   // Get problem status
   const getProblemStatus = useCallback((problemId: string): boolean => {
@@ -172,78 +169,77 @@ export function useSolves() {
     return solves[problemId]
   }, [solves])
 
+  // Mutation for setting problem status
+  const setProblemStatusMutation = useMutation({
+    mutationFn: async ({ problemId, status }: { problemId: string; status: boolean }) => {
+      if (!isAuthenticated) return
+      await setProblemStatusServer(problemId, status)
+    },
+    onMutate: async ({ problemId, status }) => {
+      // Cancel outgoing refetches
+      await queryClient.cancelQueries({ queryKey: QUERY_KEYS.userSolves })
+
+      // Snapshot previous value
+      const previousSolves = queryClient.getQueryData<Record<string, UserSolve>>(QUERY_KEYS.userSolves)
+
+      // Optimistically update
+      queryClient.setQueryData<Record<string, UserSolve>>(QUERY_KEYS.userSolves, (old = {}) => {
+        const updated = { ...old }
+        if (updated[problemId]) {
+          updated[problemId] = { ...updated[problemId], solved: status }
+        } else {
+          updated[problemId] = {
+            id: '',
+            user_id: '',
+            problem_id: problemId,
+            solved: status,
+            focus_time: 0,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          }
+        }
+        return updated
+      })
+
+      return { previousSolves }
+    },
+    onError: (_err, _variables, context) => {
+      // Rollback on error
+      if (context?.previousSolves) {
+        queryClient.setQueryData(QUERY_KEYS.userSolves, context.previousSolves)
+      }
+    },
+    onSettled: () => {
+      // Refetch to ensure consistency
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.userSolves })
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.moduleProgress })
+    },
+  })
+
   // Set problem status
   const setProblemStatus = useCallback(async (problemId: string, status: boolean): Promise<void> => {
-    try {
-      if (isAuthenticated) {
-        // Optimistically update UI immediately
-        let optimisticSolves: Record<string, UserSolve> = {}
-        setSolves(prev => {
-          const updated = { ...prev }
-          if (updated[problemId]) {
-            updated[problemId] = { ...updated[problemId], solved: status }
-          } else {
-            // Create new solve entry
-            updated[problemId] = {
-              id: '',
-              user_id: '',
-              problem_id: problemId,
-              solved: status,
-              focus_time: 0,
-              created_at: new Date().toISOString(),
-              updated_at: new Date().toISOString(),
-            }
-          }
-          
-          // Store optimistic state for cache
-          optimisticSolves = updated
-          return updated
-        })
-        // Update cache immediately with optimistic values
-        solvesCache = optimisticSolves
-        cacheTimestamp = Date.now()
-        
-        // Save to server in background (don't await - fire and forget)
-        setProblemStatusServer(problemId, status).catch((error) => {
-          console.error('Error saving problem status to server:', error)
-          // On error, revert optimistic update by reloading data
-          loadData()
-        })
-      }
-    } catch (error) {
-      console.error('Error setting problem status:', error)
-      // On error, revert optimistic update by reloading data
-      loadData()
-    }
-  }, [isAuthenticated, loadData])
+    if (!isAuthenticated) return
+    setProblemStatusMutation.mutate({ problemId, status })
+  }, [isAuthenticated, setProblemStatusMutation])
 
-  // Toggle problem status
-  // New state machine:
-  // - From "in progress" -> "solved" (when marking solved)
-  // - From "solved" -> "in progress" (when clicking solved again)
-  // Multiple problems can be in progress at once.
-  // State changes of one problem don't affect others.
-  const toggleProblemStatus = useCallback(async (problemId: string): Promise<boolean | null> => {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) {
-      return null
-    }
+  // Toggle problem status mutation
+  const toggleProblemStatusMutation = useMutation({
+    mutationFn: async (problemId: string) => {
+      if (!isAuthenticated) return false
+      return await toggleProblemStatusServer(problemId)
+    },
+    onMutate: async (problemId: string) => {
+      await queryClient.cancelQueries({ queryKey: QUERY_KEYS.userSolves })
+      const previousSolves = queryClient.getQueryData<Record<string, UserSolve>>(QUERY_KEYS.userSolves)
 
-    try {
-      const currentSolve = solves[problemId]
-      const isCurrentlySolved = currentSolve?.solved ?? false
-      const now = new Date().toISOString()
+      queryClient.setQueryData<Record<string, UserSolve>>(QUERY_KEYS.userSolves, (old = {}) => {
+        const updated = { ...old }
+        const now = new Date().toISOString()
+        const currentSolve = old[problemId]
+        const isCurrentlySolved = currentSolve?.solved ?? false
 
-      // Optimistically update UI immediately
-      let optimisticSolves: Record<string, UserSolve> = {}
-      setSolves(prev => {
-        const updated = { ...prev }
-        
-        // Update the current problem's status
         if (updated[problemId]) {
           if (isCurrentlySolved) {
-            // Currently solved -> change to in progress
-            // Clear solved_at, set started_at to now, set solved to false
             updated[problemId] = {
               ...updated[problemId],
               solved: false,
@@ -251,17 +247,13 @@ export function useSolves() {
               started_at: now,
             }
           } else {
-            // Currently in progress -> change to solved
-            // Set solved_at to now, keep started_at, set solved to true
             updated[problemId] = {
               ...updated[problemId],
               solved: true,
               solved_at: now,
-              // Keep started_at as is
             }
           }
         } else {
-          // Create new solve entry (shouldn't happen, but handle it)
           updated[problemId] = {
             id: '',
             user_id: '',
@@ -274,188 +266,175 @@ export function useSolves() {
             updated_at: now,
           }
         }
-        
-        // Store optimistic state for cache
-        optimisticSolves = updated
         return updated
       })
-      
-      // Update cache immediately with optimistic values
-      solvesCache = optimisticSolves
-      cacheTimestamp = Date.now()
-      
-      // Save to server in background (don't await - fire and forget)
-      toggleProblemStatusServer(problemId).catch((error: any) => {
-        console.error('Error saving problem status to server:', error)
-        // On error, revert optimistic update by reloading data
-        loadData()
+
+      return { previousSolves }
+    },
+    onError: (_err, _variables, context) => {
+      if (context?.previousSolves) {
+        queryClient.setQueryData(QUERY_KEYS.userSolves, context.previousSolves)
+      }
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.userSolves })
+    },
+  })
+
+  // Toggle problem status
+  const toggleProblemStatus = useCallback(async (problemId: string): Promise<boolean | null> => {
+    if (!isAuthenticated) return null
+
+    const currentSolve = solves[problemId]
+    const isCurrentlySolved = currentSolve?.solved ?? false
+
+    toggleProblemStatusMutation.mutate(problemId)
+    return !isCurrentlySolved
+  }, [isAuthenticated, solves, toggleProblemStatusMutation])
+
+  // Start problem mutation
+  const startProblemMutation = useMutation({
+    mutationFn: async (problemId: string) => {
+      if (!isAuthenticated) return false
+      await startProblemServer(problemId)
+      return true
+    },
+    onMutate: async (problemId: string) => {
+      await queryClient.cancelQueries({ queryKey: QUERY_KEYS.userSolves })
+      const previousSolves = queryClient.getQueryData<Record<string, UserSolve>>(QUERY_KEYS.userSolves)
+
+      queryClient.setQueryData<Record<string, UserSolve>>(QUERY_KEYS.userSolves, (old = {}) => {
+        const updated = { ...old }
+        const startTime = new Date().toISOString()
+
+        if (updated[problemId]) {
+          updated[problemId] = {
+            ...updated[problemId],
+            solved: false,
+            started_at: startTime,
+            solved_at: undefined,
+          }
+        } else {
+          updated[problemId] = {
+            id: '',
+            user_id: '',
+            problem_id: problemId,
+            solved: false,
+            started_at: startTime,
+            focus_time: 0,
+            created_at: startTime,
+            updated_at: startTime,
+          }
+        }
+        return updated
       })
-      
-      return !isCurrentlySolved
-    } catch (error: any) {
-      console.error('Error toggling problem status:', error)
-      // On error, revert optimistic update by reloading data
-      loadData()
-      return false
-    }
-  }, [solves, supabase.auth, loadData])
+
+      return { previousSolves }
+    },
+    onError: (_err, _variables, context) => {
+      if (context?.previousSolves) {
+        queryClient.setQueryData(QUERY_KEYS.userSolves, context.previousSolves)
+      }
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.userSolves })
+    },
+  })
 
   // Start problem
-  // Multiple problems can be in progress at once.
-  // State changes of one problem don't affect others.
   const startProblem = useCallback(async (problemId: string): Promise<boolean> => {
-    try {
-      if (isAuthenticated) {
-        const startTime = new Date().toISOString()
-        
-        // Optimistically update UI immediately
-        let optimisticSolves: Record<string, UserSolve> = {}
-        setSolves(prev => {
-          const updated = { ...prev }
-          
-          // Start the new problem: set started_at to now, clear solved_at, set solved to false
-          if (updated[problemId]) {
-            updated[problemId] = {
-              ...updated[problemId],
-              solved: false,
-              started_at: startTime,
-              solved_at: undefined, // Clear solved_at when starting
-              // Preserve existing focus_time
-            }
-          } else {
-            updated[problemId] = {
-              id: '',
-              user_id: '',
-              problem_id: problemId,
-              solved: false,
-              started_at: startTime,
-              focus_time: 0,
-              created_at: startTime,
-              updated_at: startTime,
-            }
-          }
-          
-          // Store optimistic state for cache
-          optimisticSolves = updated
-          return updated
-        })
-        
-        // Update cache immediately with optimistic values
-        solvesCache = optimisticSolves
-        cacheTimestamp = Date.now()
-        
-        // Save to server in background (don't await - fire and forget)
-        startProblemServer(problemId).catch((error) => {
-          console.error('Error saving start problem to server:', error)
-          // On error, revert optimistic update by reloading data
-          loadData()
-        })
-        
-        return true
-      }
-      return false
-    } catch (error) {
-      console.error('Error starting problem:', error)
-      // On error, revert optimistic update by reloading data
-      loadData()
-      return false
-    }
-  }, [isAuthenticated, loadData])
+    if (!isAuthenticated) return false
+    startProblemMutation.mutate(problemId)
+    return true
+  }, [isAuthenticated, startProblemMutation])
 
+  // Update focus time mutation
+  const updateFocusTimeMutation = useMutation({
+    mutationFn: async ({ problemId, additionalSeconds }: { problemId: string; additionalSeconds: number }) => {
+      if (!isAuthenticated) return false
+      await updateFocusTimeServer(problemId, additionalSeconds)
+      return true
+    },
+    onMutate: async ({ problemId, additionalSeconds }) => {
+      await queryClient.cancelQueries({ queryKey: QUERY_KEYS.userSolves })
+      const previousSolves = queryClient.getQueryData<Record<string, UserSolve>>(QUERY_KEYS.userSolves)
+
+      queryClient.setQueryData<Record<string, UserSolve>>(QUERY_KEYS.userSolves, (old = {}) => {
+        const updated = { ...old }
+        if (updated[problemId]) {
+          updated[problemId] = {
+            ...updated[problemId],
+            focus_time: (updated[problemId].focus_time || 0) + additionalSeconds,
+          }
+        }
+        return updated
+      })
+
+      return { previousSolves }
+    },
+    onError: (_err, _variables, context) => {
+      if (context?.previousSolves) {
+        queryClient.setQueryData(QUERY_KEYS.userSolves, context.previousSolves)
+      }
+    },
+  })
 
   // Update focus time
   const updateFocusTime = useCallback(async (problemId: string, additionalSeconds: number): Promise<boolean> => {
-    try {
-      if (isAuthenticated) {
-        // Optimistically update UI immediately
-        let optimisticSolves: Record<string, UserSolve> = {}
-        setSolves(prev => {
-          const updated = { ...prev }
-          if (updated[problemId]) {
-            updated[problemId] = {
-              ...updated[problemId],
-              focus_time: (updated[problemId].focus_time || 0) + additionalSeconds,
-            }
+    if (!isAuthenticated) return false
+    updateFocusTimeMutation.mutate({ problemId, additionalSeconds })
+    return true
+  }, [isAuthenticated, updateFocusTimeMutation])
+
+  // Update note mutation
+  const updateNoteMutation = useMutation({
+    mutationFn: async ({ problemId, note }: { problemId: string; note: string }) => {
+      if (!isAuthenticated) return false
+      await updateProblemNoteServer(problemId, note)
+      return true
+    },
+    onMutate: async ({ problemId, note }) => {
+      await queryClient.cancelQueries({ queryKey: QUERY_KEYS.userSolves })
+      const previousSolves = queryClient.getQueryData<Record<string, UserSolve>>(QUERY_KEYS.userSolves)
+
+      queryClient.setQueryData<Record<string, UserSolve>>(QUERY_KEYS.userSolves, (old = {}) => {
+        const updated = { ...old }
+        if (updated[problemId]) {
+          updated[problemId] = { ...updated[problemId], note }
+        } else {
+          updated[problemId] = {
+            id: '',
+            user_id: '',
+            problem_id: problemId,
+            solved: false,
+            note,
+            focus_time: 0,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
           }
-          
-          // Store optimistic state for cache
-          optimisticSolves = updated
-          return updated
-        })
-        // Update cache immediately with optimistic values
-        solvesCache = optimisticSolves
-        cacheTimestamp = Date.now()
-        
-        // Save to server in background (don't await - fire and forget)
-        updateFocusTimeServer(problemId, additionalSeconds).catch((error) => {
-          console.error('Error saving focus time to server:', error)
-          // On error, revert optimistic update by reloading data
-          loadData()
-        })
-        
-        return true
+        }
+        return updated
+      })
+
+      return { previousSolves }
+    },
+    onError: (_err, _variables, context) => {
+      if (context?.previousSolves) {
+        queryClient.setQueryData(QUERY_KEYS.userSolves, context.previousSolves)
       }
-      return false
-    } catch (error) {
-      console.error('Error updating focus time:', error)
-      // On error, revert optimistic update by reloading data
-      loadData()
-      return false
-    }
-  }, [isAuthenticated, loadData])
+    },
+  })
 
   // Update note
   const updateNote = useCallback(async (problemId: string, note: string): Promise<boolean> => {
-    try {
-      if (isAuthenticated) {
-        // Optimistically update UI immediately
-        let optimisticSolves: Record<string, UserSolve> = {}
-        setSolves(prev => {
-          const updated = { ...prev }
-          if (updated[problemId]) {
-            updated[problemId] = { ...updated[problemId], note }
-          } else {
-            updated[problemId] = {
-              id: '',
-              user_id: '',
-              problem_id: problemId,
-              solved: false,
-              note,
-              focus_time: 0,
-              created_at: new Date().toISOString(),
-              updated_at: new Date().toISOString(),
-            }
-          }
-          
-          // Store optimistic state for cache
-          optimisticSolves = updated
-          return updated
-        })
-        // Update cache immediately with optimistic values
-        solvesCache = optimisticSolves
-        cacheTimestamp = Date.now()
-        
-        // Save to server in background (don't await - fire and forget)
-        updateProblemNoteServer(problemId, note).catch((error) => {
-          console.error('Error saving note to server:', error)
-          // On error, revert optimistic update by reloading data
-          loadData()
-        })
-        
-        return true
-      }
-      return false
-    } catch (error) {
-      console.error('Error updating note:', error)
-      // On error, revert optimistic update by reloading data
-      loadData()
-      return false
-    }
-  }, [isAuthenticated, loadData])
+    if (!isAuthenticated) return false
+    updateNoteMutation.mutate({ problemId, note })
+    return true
+  }, [isAuthenticated, updateNoteMutation])
 
   // Login function
   const triggerLogin = useCallback(async (): Promise<void> => {
-    const redirectTo = typeof window !== 'undefined' 
+    const redirectTo = typeof window !== 'undefined'
       ? `${window.location.origin}/auth/callback`
       : `${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/auth/callback`
 
@@ -476,36 +455,65 @@ export function useSolves() {
     }
   }, [supabase.auth])
 
+  // Start module mutation
+  const startModuleMutation = useMutation({
+    mutationFn: async (moduleType: string) => {
+      if (!isAuthenticated) return false
+      return await startModuleServer(moduleType)
+    },
+    onSuccess: (success, moduleType) => {
+      if (success) {
+        queryClient.setQueryData<Record<string, boolean>>(QUERY_KEYS.moduleStarts, (old = {}) => ({
+          ...old,
+          [moduleType]: true,
+        }))
+      }
+    },
+  })
+
   // Start module
   const startModule = useCallback(async (moduleType: string): Promise<boolean> => {
-    try {
-      if (isAuthenticated) {
-        const success = await startModuleServer(moduleType)
-        if (success) {
-          // Optimistically update UI
-          setModuleStarts(prev => ({ ...prev, [moduleType]: true }))
-          moduleStartsCache = { ...moduleStartsCache, [moduleType]: true }
-          cacheTimestamp = Date.now()
-        }
-        return success
-      }
-      return false
-    } catch (error) {
-      console.error('Error starting module:', error)
-      return false
-    }
-  }, [isAuthenticated])
+    if (!isAuthenticated) return false
+    startModuleMutation.mutate(moduleType)
+    return true
+  }, [isAuthenticated, startModuleMutation])
 
   // Check if module is started
   const checkModuleStarted = useCallback((moduleType: string): boolean => {
     return moduleStarts[moduleType] ?? false
   }, [moduleStarts])
 
+  // Get day progress
+  const getDayProgressData = useCallback(async (day: number) => {
+    if (!isAuthenticated) return null
+    return await getDayProgress(day)
+  }, [isAuthenticated])
+
+  // Update current day
+  const updateCurrentDayData = useCallback(async (newDay: number) => {
+    if (!isAuthenticated) return false
+    const success = await updateCurrentDay(newDay)
+    if (success) {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.moduleProgress })
+    }
+    return success
+  }, [isAuthenticated, queryClient])
+
+  // Refresh data function
+  const refreshData = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: QUERY_KEYS.problems })
+    queryClient.invalidateQueries({ queryKey: QUERY_KEYS.solveCounts })
+    queryClient.invalidateQueries({ queryKey: QUERY_KEYS.userSolves })
+    queryClient.invalidateQueries({ queryKey: QUERY_KEYS.moduleStarts })
+    queryClient.invalidateQueries({ queryKey: QUERY_KEYS.moduleProgress })
+  }, [queryClient])
+
   return {
     problems,
     solves,
     solveCounts,
     moduleStarts,
+    moduleProgress,
     loading,
     isAuthenticated,
     getProblemStatus,
@@ -518,6 +526,8 @@ export function useSolves() {
     triggerLogin,
     startModule,
     checkModuleStarted,
-    refreshData: loadData,
+    getDayProgressData,
+    updateCurrentDayData,
+    refreshData,
   }
 }

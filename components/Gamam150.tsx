@@ -15,6 +15,7 @@ export default function Gamam150() {
     solves,
     solveCounts,
     moduleStarts,
+    moduleProgress,
     loading: solvesLoading,
     isAuthenticated,
     getProblemStatus,
@@ -26,6 +27,7 @@ export default function Gamam150() {
     triggerLogin,
     startModule,
     checkModuleStarted,
+    updateCurrentDayData,
   } = useSolves()
 
   const [codingProblems, setCodingProblems] = useState<ProblemData>({})
@@ -146,6 +148,31 @@ export default function Gamam150() {
       }
     }
     return cnt === problems.length
+  }
+
+  // Calculate day progress
+  const getDayProgress = (day: string): { completed: number; total: number; percentage: number } => {
+    const problems = codingProblems[day]
+    if (!problems || problems.length === 0) {
+      return { completed: 0, total: 0, percentage: 0 }
+    }
+    const completed = problems.filter(p => getProblemStatus(p.id)).length
+    const percentage = Math.round((completed / problems.length) * 100)
+    return { completed, total: problems.length, percentage }
+  }
+
+  // Check if day is overdue
+  const isDayOverdue = (day: string): boolean => {
+    if (!moduleProgress || !moduleProgress.startedAt) return false
+    const dayNum = day === 'other' ? -1 : parseInt(day)
+    if (dayNum < 0) return false
+    
+    const startedAt = new Date(moduleProgress.startedAt)
+    const now = new Date()
+    const daysSinceStart = Math.floor((now.getTime() - startedAt.getTime()) / (1000 * 60 * 60 * 24))
+    
+    // Day is overdue if it's before the expected day and not completed
+    return dayNum < daysSinceStart && !isDayCompleted(day)
   }
 
   const updateProblemStatus = async (problemId: string) => {
@@ -293,30 +320,9 @@ export default function Gamam150() {
     }
   }
 
-  // Show skeleton loader when data is loading
-  if (solvesLoading) {
+  // Show skeleton loader when data is loading or no problems available
+  if (solvesLoading || problems.length === 0) {
     return <SkeletonLoader />
-  }
-
-  // Show message if no problems are available
-  if (problems.length === 0) {
-    return (
-      <div className="min-h-screen bg-white dark:bg-gray-900 px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
-        <div className="max-w-6xl mx-auto">
-          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-center text-gray-900 dark:text-white mb-6 sm:mb-10">
-            GAMAM 150 Day Tracker
-          </h1>
-          <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-6 text-center">
-            <p className="text-lg text-yellow-800 dark:text-yellow-200 mb-2">
-              No problems found
-            </p>
-            <p className="text-sm text-yellow-700 dark:text-yellow-300">
-              Please run <code className="bg-yellow-100 dark:bg-yellow-900/40 px-2 py-1 rounded">npm run upload-150day-problems</code> to populate the database with problems.
-            </p>
-          </div>
-        </div>
-      </div>
-    )
   }
 
   return (
@@ -349,6 +355,75 @@ export default function Gamam150() {
           </div>
         )}
 
+        {/* Progress Summary */}
+        {moduleHasStarted && moduleProgress && (
+          <div className="bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20 rounded-lg p-4 sm:p-6 mb-6 border border-blue-200 dark:border-blue-800">
+            <div className="mb-4">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Your Progress</h3>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
+                <div className="flex flex-col">
+                  <span className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">Ongoing Day</span>
+                  <strong className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white">
+                    {moduleProgress.currentDay + 1}
+                  </strong>
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">Completed Days</span>
+                  <strong className="text-xl sm:text-2xl font-bold text-green-600 dark:text-green-400">
+                    {moduleProgress.completedDays}
+                  </strong>
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">Overdue Days</span>
+                  <strong className="text-xl sm:text-2xl font-bold text-red-600 dark:text-red-400">
+                    {moduleProgress.overdueDays}
+                  </strong>
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">Total Days</span>
+                  <strong className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white">
+                    {moduleProgress.totalDays}
+                  </strong>
+                </div>
+              </div>
+              
+              {/* Overall Progress Bar */}
+              <div className="mb-2">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">Overall Progress</span>
+                  <span className="text-sm font-bold text-gray-900 dark:text-white">
+                    {moduleProgress.completedPercentage}%
+                  </span>
+                </div>
+                <div className="h-4 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden relative">
+                  {/* Completed progress (green) */}
+                  <div 
+                    className="h-full bg-green-500 dark:bg-green-600 transition-all duration-500"
+                    style={{ width: `${moduleProgress.completedPercentage}%` }}
+                  />
+                  {/* Overdue progress (red) - shown on top of completed */}
+                  {moduleProgress.overduePercentage > 0 && (
+                    <div 
+                      className="h-full bg-red-500 dark:bg-red-600 absolute top-0 transition-all duration-500"
+                      style={{ 
+                        left: `${moduleProgress.completedPercentage}%`,
+                        width: `${moduleProgress.overduePercentage}%` 
+                      }}
+                    />
+                  )}
+                </div>
+                <div className="flex items-center justify-between mt-1 text-xs text-gray-600 dark:text-gray-400">
+                  <span>Completed: {moduleProgress.completedPercentage}%</span>
+                  {moduleProgress.overduePercentage > 0 && (
+                    <span className="text-red-600 dark:text-red-400">Overdue: {moduleProgress.overduePercentage}%</span>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Stats Summary */}
         <div className="flex flex-col sm:flex-row justify-between items-center gap-4 sm:gap-6 p-4 sm:p-6 bg-gray-50 dark:bg-gray-800 rounded-lg shadow-md mb-6">
           <div className="flex flex-col items-center sm:items-start">
             <span className="text-sm sm:text-base text-gray-600 dark:text-gray-400">Day Completed</span>
@@ -437,30 +512,58 @@ export default function Gamam150() {
 
         <div className="space-y-4 sm:space-y-6">
           {Object.keys(codingProblems).length === 0 ? (
-            <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-6 text-center">
-              <p className="text-lg text-yellow-800 dark:text-yellow-200 mb-2">
-                No problems found
-              </p>
-              <p className="text-sm text-yellow-700 dark:text-yellow-300">
-                Please run <code className="bg-yellow-100 dark:bg-yellow-900/40 px-2 py-1 rounded">npm run upload-150day-problems</code> to populate the database with problems.
-              </p>
-            </div>
+            <SkeletonLoader />
           ) : (
             Object.entries(codingProblems).map(([day, problems]) => (
             <div key={day} className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 sm:p-6 hover:shadow-lg transition-shadow">
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4 mb-4 sm:mb-6 pb-4 border-b border-gray-200 dark:border-gray-700">
-                <span className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white">
-                  Day {day === 'other' ? '?' : parseInt(day) + 1}
-                </span>
-                <span
-                  className={`px-4 sm:px-8 py-2 text-sm sm:text-base font-bold rounded-full ${
-                    isDayCompleted(day)
-                      ? 'bg-green-600 dark:bg-green-500 text-white'
-                      : 'bg-red-600 dark:bg-red-500 text-white'
-                  }`}
-                >
-                  {isDayCompleted(day) ? 'Completed' : 'Pending'}
-                </span>
+                <div className="flex-1 w-full">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white">
+                      Day {day === 'other' ? '?' : parseInt(day) + 1}
+                    </span>
+                    <span
+                      className={`px-3 sm:px-6 py-1.5 text-xs sm:text-sm font-bold rounded-full ${
+                        isDayCompleted(day)
+                          ? 'bg-green-600 dark:bg-green-500 text-white'
+                          : isDayOverdue(day)
+                          ? 'bg-red-600 dark:bg-red-500 text-white'
+                          : 'bg-yellow-500 dark:bg-yellow-600 text-white'
+                      }`}
+                    >
+                      {isDayCompleted(day) ? 'Completed' : isDayOverdue(day) ? 'Overdue' : 'Pending'}
+                    </span>
+                  </div>
+                  {/* Day Progress Bar */}
+                  {(() => {
+                    const progress = getDayProgress(day)
+                    const isOverdue = isDayOverdue(day)
+                    return (
+                      <div>
+                        <div className="flex items-center justify-between mb-1.5">
+                          <span className="text-xs text-gray-600 dark:text-gray-400">
+                            {progress.completed} / {progress.total} problems
+                          </span>
+                          <span className={`text-xs font-semibold ${isOverdue ? 'text-red-600 dark:text-red-400' : 'text-gray-700 dark:text-gray-300'}`}>
+                            {progress.percentage}%
+                          </span>
+                        </div>
+                        <div className="h-2 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden">
+                          <div 
+                            className={`h-full transition-all duration-500 ${
+                              isDayCompleted(day)
+                                ? 'bg-green-500 dark:bg-green-600'
+                                : isOverdue
+                                ? 'bg-red-500 dark:bg-red-600'
+                                : 'bg-blue-500 dark:bg-blue-600'
+                            }`}
+                            style={{ width: `${progress.percentage}%` }}
+                          />
+                        </div>
+                      </div>
+                    )
+                  })()}
+                </div>
               </div>
               <div className="space-y-3">
                 {problems.map((problem) => {
@@ -504,25 +607,31 @@ export default function Gamam150() {
                       {!isExpanded ? (
                         // Normal collapsed view
                         <div className="grid grid-cols-1 sm:grid-cols-[40px_1fr_auto_auto_auto_auto_auto_140px] gap-2 sm:gap-4 items-center py-2 sm:py-3">
-                      <span className="text-center font-bold text-gray-700 dark:text-gray-300 text-sm sm:text-base">
+                      <span className={`text-center font-bold text-gray-700 dark:text-gray-300 text-sm sm:text-base ${!moduleHasStarted ? 'opacity-60' : ''}`}>
                         {problems.indexOf(problem) + 1}
                       </span>
-                      <div className="flex items-center gap-2 sm:gap-3">
-                        <a
-                          href={problem.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-blue-600 dark:text-blue-400 hover:underline text-sm sm:text-base truncate"
-                        >
-                          {problem.name}
-                        </a>
+                      <div className={`flex items-center gap-2 sm:gap-3 ${!moduleHasStarted ? 'opacity-60' : ''}`}>
+                        {moduleHasStarted ? (
+                          <a
+                            href={problem.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-600 dark:text-blue-400 hover:underline text-sm sm:text-base truncate"
+                          >
+                            {problem.name}
+                          </a>
+                        ) : (
+                          <span className="text-blue-600 dark:text-blue-400 text-sm sm:text-base truncate cursor-not-allowed">
+                            {problem.name}
+                          </span>
+                        )}
                         <div className="flex items-center gap-1 text-xs sm:text-sm text-gray-600 dark:text-gray-400">
                           <Users size={14} />
                           <span>{solveCount}</span>
                         </div>
                       </div>
                       {/* Solving time column */}
-                      <div className={`relative ${!moduleHasStarted ? 'blur-sm' : ''}`}>
+                      <div className={`relative ${!moduleHasStarted ? 'opacity-60' : ''}`}>
                         <div className="flex flex-col gap-0.5">
                           <div className="grid grid-cols-3 gap-0.5">
                             {(() => {
@@ -554,7 +663,7 @@ export default function Gamam150() {
                         </div>
                       </div>
                       {/* Focus time column */}
-                      <div className={`relative ${!moduleHasStarted ? 'blur-sm' : ''}`}>
+                      <div className={`relative ${!moduleHasStarted ? 'opacity-60' : ''}`}>
                         <div className="flex flex-col gap-0.5">
                           <div className="grid grid-cols-3 gap-0.5">
                             {(() => {
@@ -586,7 +695,7 @@ export default function Gamam150() {
                         </div>
                       </div>
                       {/* Type/Difficulty column */}
-                      <div className={`relative ${!moduleHasStarted ? 'blur-sm' : ''}`}>
+                      <div className={`relative ${!moduleHasStarted ? 'opacity-60' : ''}`}>
                         {(problem.type || problem.difficulty) && (
                           <button
                             className={`px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all duration-200 backdrop-blur-md border shadow-sm ${getGlassMorphismStyles(problem.difficulty)}`}
@@ -598,7 +707,7 @@ export default function Gamam150() {
                         )}
                       </div>
                       {/* Focus button column */}
-                      <div className={`relative ${!moduleHasStarted ? 'blur-sm' : ''}`}>
+                      <div className={`relative ${!moduleHasStarted ? 'opacity-60' : ''}`}>
                         <button
                           onClick={async () => {
                             if (!moduleHasStarted) return
@@ -621,7 +730,7 @@ export default function Gamam150() {
                         </button>
                       </div>
                       {/* Note button column */}
-                      <div className={`relative ${!moduleHasStarted ? 'blur-sm' : ''}`}>
+                      <div className={`relative ${!moduleHasStarted ? 'opacity-60' : ''}`}>
                         <button
                           onClick={async () => {
                             if (!moduleHasStarted) return
@@ -647,7 +756,7 @@ export default function Gamam150() {
                         </button>
                       </div>
                       {/* State button column */}
-                      <div className={`relative ${!moduleHasStarted ? 'blur-sm' : ''}`}>
+                      <div className={`relative ${!moduleHasStarted ? 'opacity-60' : ''}`}>
                         {solvesLoading && isAuthenticated ? (
                           <button
                             disabled
@@ -658,7 +767,7 @@ export default function Gamam150() {
                         ) : !moduleHasStarted ? (
                           <button
                             disabled
-                            className="w-full min-h-[32px] sm:min-h-[36px] flex items-center justify-center gap-1 px-3 sm:px-4 py-1.5 sm:py-2 bg-gray-400 dark:bg-gray-600 text-white rounded-full text-xs sm:text-sm font-bold cursor-not-allowed opacity-50"
+                            className="w-full min-h-[32px] sm:min-h-[36px] flex items-center justify-center gap-1 px-3 sm:px-4 py-1.5 sm:py-2 bg-gray-400 dark:bg-gray-600 text-white rounded-full text-xs sm:text-sm font-bold cursor-not-allowed opacity-60"
                           >
                             <Play size={14} />
                             Start
@@ -717,17 +826,26 @@ export default function Gamam150() {
                             {/* Centered content */}
                             <div className="flex flex-col gap-3 items-center justify-center w-full">
                               {/* First row: Problem title and difficulty */}
-                              <div className="flex flex-col gap-2 items-center">
+                              <div className={`flex flex-col gap-2 items-center ${!moduleHasStarted ? 'opacity-60' : ''}`}>
                                 <div className="flex flex-col gap-2 items-center">
-                                  <a
-                                    href={problem.url}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="text-blue-600 dark:text-blue-400 hover:underline text-xl sm:text-2xl font-semibold text-center font-mono tracking-wide"
-                                    style={{ fontFamily: '"Roboto Mono", "Courier New", monospace' }}
-                                  >
-                                    {problem.name}
-                                  </a>
+                                  {moduleHasStarted ? (
+                                    <a
+                                      href={problem.url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-blue-600 dark:text-blue-400 hover:underline text-xl sm:text-2xl font-semibold text-center font-mono tracking-wide"
+                                      style={{ fontFamily: '"Roboto Mono", "Courier New", monospace' }}
+                                    >
+                                      {problem.name}
+                                    </a>
+                                  ) : (
+                                    <span
+                                      className="text-blue-600 dark:text-blue-400 text-xl sm:text-2xl font-semibold text-center font-mono tracking-wide cursor-not-allowed"
+                                      style={{ fontFamily: '"Roboto Mono", "Courier New", monospace' }}
+                                    >
+                                      {problem.name}
+                                    </span>
+                                  )}
                                   <div className="flex items-center gap-1 text-xs sm:text-sm text-gray-600 dark:text-gray-400">
                                     <Users size={14} />
                                     <span>{solveCount}</span>
