@@ -47,7 +47,7 @@ function saveCache(cache: Record<string, any>) {
 }
 
 export function QueryProvider({ children }: { children: React.ReactNode }) {
-  const saveTimeoutRef = useRef<NodeJS.Timeout>()
+  const saveTimeoutRef = useRef<NodeJS.Timeout | undefined>(undefined)
 
   const [queryClient] = useState(
     () => {
