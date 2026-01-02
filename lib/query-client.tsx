@@ -74,7 +74,6 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
       const restoredCache = restoreCache()
       if (restoredCache) {
         try {
-          const queryCache = client.getQueryCache()
           let restoredCount = 0
 
           Object.entries(restoredCache).forEach(([key, value]: [string, any]) => {
@@ -82,11 +81,11 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
               try {
                 const queryKey = JSON.parse(key)
                 const dataUpdatedAt = value.dataUpdatedAt || Date.now()
-
-                // Set the query in cache with proper state
+                // Set the query data in cache using React Query v5 API
                 client.setQueryData(queryKey, value.data)
                 restoredCount++
-              } catch (e) {
+              } 
+              catch (e) {
                 // Skip invalid cache entries
                 console.warn('Skipping invalid cache entry:', key, e)
               }
