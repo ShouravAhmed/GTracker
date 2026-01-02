@@ -37,7 +37,7 @@ export interface ProblemWithSolve extends Problem {
 export async function getAllProblems(): Promise<Problem[]> {
   try {
     const supabase = await createClient()
-    
+
     const { data, error } = await supabase
       .from('150DayProblems')
       .select('*')
@@ -66,7 +66,7 @@ export async function getAllProblems(): Promise<Problem[]> {
 export async function getProblemSolveCounts(): Promise<Record<string, number>> {
   try {
     const supabase = await createClient()
-    
+
     const { data, error } = await supabase
       .from('problem_solve_counts')
       .select('problem_id, solve_count')
@@ -94,7 +94,7 @@ export async function getProblemSolveCounts(): Promise<Record<string, number>> {
 export async function getUserSolves(): Promise<Record<string, UserSolve>> {
   try {
     const supabase = await createClient()
-    
+
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) {
       return {}
@@ -133,7 +133,7 @@ export async function getUserSolves(): Promise<Record<string, UserSolve>> {
 export async function getProblemStatus(problemId: string): Promise<boolean> {
   try {
     const supabase = await createClient()
-    
+
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) {
       return false
@@ -174,7 +174,7 @@ export async function setProblemStatus(
 ): Promise<boolean> {
   try {
     const supabase = await createClient()
-    
+
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) {
       throw new Error('User not authenticated')
@@ -232,7 +232,7 @@ export async function setProblemStatus(
 export async function toggleProblemStatus(problemId: string): Promise<boolean> {
   try {
     const supabase = await createClient()
-    
+
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) {
       throw new Error('User not authenticated')
@@ -248,8 +248,8 @@ export async function toggleProblemStatus(problemId: string): Promise<boolean> {
 
     const isCurrentlySolved = existing?.solved ?? false
     const now = new Date().toISOString()
-    
-    let updateData: any = {
+
+    const updateData: any = {
       user_id: user.id,
       problem_id: problemId,
       updated_at: now,
@@ -300,7 +300,7 @@ export async function toggleProblemStatus(problemId: string): Promise<boolean> {
 export async function startProblem(problemId: string): Promise<boolean> {
   try {
     const supabase = await createClient()
-    
+
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) {
       throw new Error('User not authenticated')
@@ -354,7 +354,7 @@ export async function updateFocusTime(
 ): Promise<boolean> {
   try {
     const supabase = await createClient()
-    
+
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) {
       throw new Error('User not authenticated')
@@ -404,7 +404,7 @@ export async function updateProblemNote(
 ): Promise<boolean> {
   try {
     const supabase = await createClient()
-    
+
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) {
       throw new Error('User not authenticated')
@@ -441,7 +441,7 @@ export async function updateProblemNote(
 export async function startModule(moduleType: string): Promise<boolean> {
   try {
     const supabase = await createClient()
-    
+
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) {
       throw new Error('User not authenticated')
@@ -491,7 +491,7 @@ export async function startModule(moduleType: string): Promise<boolean> {
 export async function isModuleStarted(moduleType: string): Promise<boolean> {
   try {
     const supabase = await createClient()
-    
+
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) {
       return false
@@ -530,7 +530,7 @@ export async function isModuleStarted(moduleType: string): Promise<boolean> {
 export async function getUserModuleStarts(): Promise<Record<string, boolean>> {
   try {
     const supabase = await createClient()
-    
+
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) {
       return {}
@@ -578,7 +578,7 @@ export interface ModuleProgress {
 export async function getModuleProgress(): Promise<ModuleProgress | null> {
   try {
     const supabase = await createClient()
-    
+
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) {
       return null
@@ -618,12 +618,12 @@ export async function getModuleProgress(): Promise<ModuleProgress | null> {
     }
 
     const solvedProblemIds = new Set(solves?.map(s => s.problem_id) || [])
-    
+
     // Group problems by day and check completion
     const daysMap = new Map<number, { total: number; solved: number }>()
     let otherProblemsCount = 0
     let otherProblemsSolved = 0
-    
+
     problems.forEach(problem => {
       if (problem.day === null || problem.day === undefined) {
         // Problems without day assignment belong to "Day 127-150"
@@ -652,13 +652,13 @@ export async function getModuleProgress(): Promise<ModuleProgress | null> {
 
     // Check if "Day 127-150" is completed (all problems in that section are solved)
     const otherSectionCompleted = otherProblemsCount > 0 && otherProblemsSolved === otherProblemsCount
-    
+
     // Count days with specific assignments + Day 127-150 section
     // Day 127-150 represents 24 days (days 127, 128, ..., 150)
     const daysWithSpecificDay = daysMap.size
     const day127To150Count = otherProblemsCount > 0 ? 24 : 0 // Day 127-150 represents 24 days
     const totalDays = 150 // Always 150 days total for GAMAM 150 challenge
-    
+
     // If "Day 127-150" section is completed, add the remaining days to reach 150 total
     // This ensures we never exceed 150 completed days
     const completedFromSpecificDays = completedDays.length
@@ -675,16 +675,16 @@ export async function getModuleProgress(): Promise<ModuleProgress | null> {
     const expectedDay = Math.min(daysSinceStart, totalDays - 1) // Can be up to totalDays - 1 (0-indexed, so max is 149)
 
     // Find current day (highest completed day + 1, or expected day if no progress)
-    const highestCompletedDay = completedDays.length > 0 
-      ? Math.max(...completedDays) 
+    const highestCompletedDay = completedDays.length > 0
+      ? Math.max(...completedDays)
       : -1
-    
+
     // Check if we're in the Day 127-150 range
     const isInOtherSection = expectedDay >= 127 && expectedDay < 150
-    
+
     const currentDay = Math.max(
-      highestCompletedDay + 1, 
-      expectedDay, 
+      highestCompletedDay + 1,
+      expectedDay,
       moduleStart.current_day !== null && moduleStart.current_day !== undefined ? moduleStart.current_day : 0
     )
 
@@ -699,7 +699,7 @@ export async function getModuleProgress(): Promise<ModuleProgress | null> {
         }
       }
     }
-    
+
     // Check if Day 127-150 section is overdue (expected day is >= 127 but section not completed)
     if (expectedDay >= 127 && !otherSectionCompleted && otherProblemsCount > 0) {
       // Count overdue days in the 127-150 range
@@ -708,7 +708,7 @@ export async function getModuleProgress(): Promise<ModuleProgress | null> {
         overdueDays.push(day)
       }
     }
-    
+
     const overdueDaysCount = overdueDays.length
 
     // Calculate percentages
@@ -736,7 +736,7 @@ export async function getModuleProgress(): Promise<ModuleProgress | null> {
 export async function getDayProgress(day: number): Promise<{ completed: number; total: number; percentage: number } | null> {
   try {
     const supabase = await createClient()
-    
+
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) {
       return null
@@ -787,7 +787,7 @@ export async function getDayProgress(day: number): Promise<{ completed: number; 
 export async function updateCurrentDay(newDay: number): Promise<boolean> {
   try {
     const supabase = await createClient()
-    
+
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) {
       return false
