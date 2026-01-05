@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useEffect } from 'react'
+import { useMemo, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useSolves } from '@/lib/solves-client'
 import { Play, Calendar, FileText, CheckCircle2, TrendingUp, ArrowRight, Lock } from 'lucide-react'
@@ -279,6 +279,12 @@ const materialSets: MaterialSet[] = [
 export default function Home() {
   const router = useRouter()
   const { problems, solves, loading, isAuthenticated, getProblemStatus, startProblem, triggerLogin, moduleProgress, moduleStarts, checkModuleStarted } = useSolves()
+  const [isMounted, setIsMounted] = useState(false)
+
+  // Ensure component is mounted on client to prevent hydration mismatch
+  useEffect(() => {
+    setIsMounted(true)
+  }, [])
 
   // Debug logging
   useEffect(() => {
@@ -297,8 +303,8 @@ export default function Home() {
         // Skip dummy modules
         if (module.type === 'dummy') {
           stats[module.id] = {
-            days: Math.floor(Math.random() * 20) + 5,
-            items: Math.floor(Math.random() * 100) + 10,
+            days: 15, // Fixed value to prevent hydration mismatch
+            items: 50, // Fixed value to prevent hydration mismatch
             progress: 0,
             hasStarted: false,
           }
@@ -459,12 +465,8 @@ export default function Home() {
     </div>
   )
 
-  // Debug logging
-  useEffect(() => {
-    console.log('Home page - Problems:', problems.length, 'Loading:', loading, 'Solves:', Object.keys(solves).length)
-  }, [problems, loading, solves])
-
-  if (loading) {
+  // Show skeleton during initial load or before client-side mount
+  if (!isMounted || loading) {
     return <HomePageSkeleton />
   }
 

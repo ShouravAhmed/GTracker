@@ -9,13 +9,13 @@ const MAX_CACHE_AGE = 24 * 60 * 60 * 1000 // 24 hours
 // Helper to restore cache from localStorage
 function restoreCache(): Record<string, any> | undefined {
   if (typeof window === 'undefined') return undefined
-  
+
   try {
     const stored = localStorage.getItem(PERSISTENCE_KEY)
     if (!stored) return undefined
 
     const parsed = JSON.parse(stored)
-    
+
     // Check if cache is too old
     const age = Date.now() - parsed.timestamp
     if (age > MAX_CACHE_AGE) {
@@ -34,7 +34,7 @@ function restoreCache(): Record<string, any> | undefined {
 // Helper to save cache to localStorage
 function saveCache(cache: Record<string, any>) {
   if (typeof window === 'undefined') return
-  
+
   try {
     const stored = {
       timestamp: Date.now(),
@@ -47,7 +47,7 @@ function saveCache(cache: Record<string, any>) {
 }
 
 export function QueryProvider({ children }: { children: React.ReactNode }) {
-  const saveTimeoutRef = useRef<NodeJS.Timeout>()
+  const saveTimeoutRef = useRef<NodeJS.Timeout | undefined>(undefined)
 
   const [queryClient] = useState(
     () => {
@@ -74,14 +74,16 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
       const restoredCache = restoreCache()
       if (restoredCache) {
         try {
+          const queryCache = client.getQueryCache()
           let restoredCount = 0
-          
+
           Object.entries(restoredCache).forEach(([key, value]: [string, any]) => {
             if (value && value.data !== undefined) {
               try {
                 const queryKey = JSON.parse(key)
-                
-                // Set the query data in cache using React Query v5 API
+                const dataUpdatedAt = value.dataUpdatedAt || Date.now()
+
+                // Set the query in cache with proper state
                 client.setQueryData(queryKey, value.data)
                 restoredCount++
               } catch (e) {
@@ -90,7 +92,7 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
               }
             }
           })
-          
+
           if (restoredCount > 0) {
             console.log(`✅ Restored ${restoredCount} queries from localStorage cache`)
           }
@@ -115,7 +117,7 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
       saveTimeoutRef.current = setTimeout(() => {
         const cache = queryClient.getQueryCache()
         const cacheData: Record<string, any> = {}
-        
+
         cache.getAll().forEach((query) => {
           if (query.state.data !== undefined && query.state.status === 'success') {
             cacheData[JSON.stringify(query.queryKey)] = {
@@ -124,7 +126,7 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
             }
           }
         })
-        
+
         saveCache(cacheData)
       }, 500) // Wait 500ms after last change
     })
