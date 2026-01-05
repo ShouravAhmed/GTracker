@@ -280,6 +280,7 @@ export default function Home() {
   const router = useRouter()
   const [isMounted, setIsMounted] = useState(false)
   const [configError, setConfigError] = useState<string | null>(null)
+  const [runtimeError, setRuntimeError] = useState<Error | null>(null)
 
   // Check for required environment variables on client side
   useEffect(() => {
@@ -301,7 +302,15 @@ export default function Home() {
   }, [])
 
   // Call hook unconditionally (React rules)
+  // Errors will be caught by ErrorBoundary or handled in the hook itself
   const { problems, solves, loading, isAuthenticated, getProblemStatus, startProblem, triggerLogin, moduleProgress, moduleStarts, checkModuleStarted } = useSolves()
+
+  // Catch any runtime errors from data processing
+  useEffect(() => {
+    if (!loading && problems && !Array.isArray(problems)) {
+      setRuntimeError(new Error('Invalid data format received'))
+    }
+  }, [problems, loading])
 
   // Debug logging
   useEffect(() => {
@@ -311,81 +320,93 @@ export default function Home() {
     }
   }, [problems, loading, solves])
 
-  // Calculate stats for each module
+  // Calculate stats for each module with error handling
   const moduleStats = useMemo(() => {
-    const stats: Record<string, { days: number; items: number; progress: number; hasStarted: boolean; firstProblemId?: string }> = {}
+    try {
+      const stats: Record<string, { days: number; items: number; progress: number; hasStarted: boolean; firstProblemId?: string }> = {}
 
-    for (const materialSet of materialSets) {
-      for (const module of materialSet.modules) {
-        // Skip dummy modules
-        if (module.type === 'dummy') {
+      // Ensure problems is an array to prevent errors
+      const safeProblems = Array.isArray(problems) ? problems : []
+      const safeSolves = solves && typeof solves === 'object' ? solves : {}
+
+      for (const materialSet of materialSets) {
+        for (const module of materialSet.modules) {
+          // Skip dummy modules
+          if (module.type === 'dummy') {
+            stats[module.id] = {
+              days: 15, // Fixed value to prevent hydration mismatch
+              items: 50, // Fixed value to prevent hydration mismatch
+              progress: 0,
+              hasStarted: false,
+            }
+            continue
+          }
+
+          let moduleProblems = safeProblems
+
+          // Filter by type if not 'all'
+          if (module.type !== 'all') {
+            moduleProblems = safeProblems.filter(p => p && p.type === module.type)
+          }
+
+          // Calculate unique days (for GAMAM 150) or just count problems
+          const uniqueDays = new Set<number>()
+          let firstProblemId: string | undefined
+          let hasOtherProblems = false
+
+          for (const problem of moduleProblems) {
+            if (problem && problem.day !== null && problem.day !== undefined) {
+              uniqueDays.add(problem.day)
+            } else if (problem) {
+              // Problems without day assignment belong to "Day 127-150"
+              hasOtherProblems = true
+            }
+            if (problem && !firstProblemId) {
+              firstProblemId = problem.id
+            }
+          }
+
+          // For GAMAM 150, always show 150 days total (unique days with assignments + Day 127-150 section)
+          // For others, show item count as "days"
+          const days = module.type === 'all' 
+            ? 150 // Always 150 days total for GAMAM 150 challenge
+            : moduleProblems.length
+          const items = moduleProblems.length
+
+          // Calculate progress
+          let solvedCount = 0
+          let hasStarted = false
+
+          for (const problem of moduleProblems) {
+            if (problem && getProblemStatus(problem.id)) {
+              solvedCount++
+            }
+            if (problem) {
+              const userSolve = safeSolves[problem.id]
+              if (userSolve?.started_at) {
+                hasStarted = true
+              }
+            }
+          }
+
+          const progress = items > 0 ? Math.round((solvedCount / items) * 100) : 0
+
           stats[module.id] = {
-            days: 15, // Fixed value to prevent hydration mismatch
-            items: 50, // Fixed value to prevent hydration mismatch
-            progress: 0,
-            hasStarted: false,
+            days,
+            items,
+            progress,
+            hasStarted,
+            firstProblemId,
           }
-          continue
-        }
-
-        let moduleProblems = problems
-
-        // Filter by type if not 'all'
-        if (module.type !== 'all') {
-          moduleProblems = problems.filter(p => p.type === module.type)
-        }
-
-        // Calculate unique days (for GAMAM 150) or just count problems
-        const uniqueDays = new Set<number>()
-        let firstProblemId: string | undefined
-        let hasOtherProblems = false
-
-        for (const problem of moduleProblems) {
-          if (problem.day !== null && problem.day !== undefined) {
-            uniqueDays.add(problem.day)
-          } else {
-            // Problems without day assignment belong to "Day 127-150"
-            hasOtherProblems = true
-          }
-          if (!firstProblemId) {
-            firstProblemId = problem.id
-          }
-        }
-
-        // For GAMAM 150, always show 150 days total (unique days with assignments + Day 127-150 section)
-        // For others, show item count as "days"
-        const days = module.type === 'all' 
-          ? 150 // Always 150 days total for GAMAM 150 challenge
-          : moduleProblems.length
-        const items = moduleProblems.length
-
-        // Calculate progress
-        let solvedCount = 0
-        let hasStarted = false
-
-        for (const problem of moduleProblems) {
-          if (getProblemStatus(problem.id)) {
-            solvedCount++
-          }
-          const userSolve = solves[problem.id]
-          if (userSolve?.started_at) {
-            hasStarted = true
-          }
-        }
-
-        const progress = items > 0 ? Math.round((solvedCount / items) * 100) : 0
-
-        stats[module.id] = {
-          days,
-          items,
-          progress,
-          hasStarted,
-          firstProblemId,
         }
       }
-    }
 
-    return stats
+      return stats
+    } catch (error) {
+      console.error('Error calculating module stats:', error)
+      setRuntimeError(error instanceof Error ? error : new Error('Failed to calculate statistics'))
+      return {}
+    }
   }, [problems, solves, getProblemStatus])
 
   const handleStartModule = async (moduleId: string, module: ModuleCard) => {
@@ -482,8 +503,8 @@ export default function Home() {
     </div>
   )
 
-  // Show error message if configuration is missing
-  if (configError) {
+  // Show error message if configuration is missing or runtime error occurred
+  if (configError || runtimeError) {
     return (
       <div className="min-h-screen bg-white dark:bg-gray-900 px-4 sm:px-6 lg:px-8 py-8 sm:py-12 flex items-center justify-center">
         <div className="max-w-2xl mx-auto text-center">
@@ -493,16 +514,24 @@ export default function Home() {
             </div>
           </div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">
-            Configuration Error
+            {configError ? 'Configuration Error' : 'Runtime Error'}
           </h1>
           <p className="text-gray-600 dark:text-gray-400 mb-6">
-            {configError}
+            {configError || runtimeError?.message || 'An unexpected error occurred'}
           </p>
           <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4 text-left">
             <p className="text-sm text-yellow-800 dark:text-yellow-200">
-              <strong>For developers:</strong> Make sure your environment variables are set in your deployment platform (Netlify, Vercel, etc.).
+              <strong>For developers:</strong> {configError 
+                ? 'Make sure your environment variables are set in your deployment platform (Netlify, Vercel, etc.).'
+                : 'Check the browser console for more details. This error may be related to data fetching or Supabase configuration.'}
             </p>
           </div>
+          <button
+            onClick={() => window.location.reload()}
+            className="mt-6 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors"
+          >
+            Reload Page
+          </button>
         </div>
       </div>
     )
