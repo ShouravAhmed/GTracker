@@ -3,7 +3,7 @@
 import { useMemo, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useSolves } from '@/lib/solves-client'
-import { Play, Calendar, FileText, CheckCircle2, TrendingUp, ArrowRight, Lock } from 'lucide-react'
+import { Play, Calendar, FileText, CheckCircle2, TrendingUp, ArrowRight, Lock, AlertCircle } from 'lucide-react'
 
 interface ModuleCard {
   id: string
@@ -278,13 +278,30 @@ const materialSets: MaterialSet[] = [
 
 export default function Home() {
   const router = useRouter()
-  const { problems, solves, loading, isAuthenticated, getProblemStatus, startProblem, triggerLogin, moduleProgress, moduleStarts, checkModuleStarted } = useSolves()
   const [isMounted, setIsMounted] = useState(false)
+  const [configError, setConfigError] = useState<string | null>(null)
+
+  // Check for required environment variables on client side
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+      const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+      if (!supabaseUrl || !supabaseAnonKey) {
+        setConfigError(
+          'Missing Supabase configuration. Please ensure NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY are set in your environment variables.'
+        )
+      }
+    }
+  }, [])
 
   // Ensure component is mounted on client to prevent hydration mismatch
   useEffect(() => {
     setIsMounted(true)
   }, [])
+
+  // Call hook unconditionally (React rules)
+  const { problems, solves, loading, isAuthenticated, getProblemStatus, startProblem, triggerLogin, moduleProgress, moduleStarts, checkModuleStarted } = useSolves()
 
   // Debug logging
   useEffect(() => {
@@ -464,6 +481,32 @@ export default function Home() {
       </div>
     </div>
   )
+
+  // Show error message if configuration is missing
+  if (configError) {
+    return (
+      <div className="min-h-screen bg-white dark:bg-gray-900 px-4 sm:px-6 lg:px-8 py-8 sm:py-12 flex items-center justify-center">
+        <div className="max-w-2xl mx-auto text-center">
+          <div className="mb-6 flex justify-center">
+            <div className="rounded-full bg-red-100 dark:bg-red-900/20 p-4">
+              <AlertCircle className="h-12 w-12 text-red-600 dark:text-red-400" />
+            </div>
+          </div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">
+            Configuration Error
+          </h1>
+          <p className="text-gray-600 dark:text-gray-400 mb-6">
+            {configError}
+          </p>
+          <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4 text-left">
+            <p className="text-sm text-yellow-800 dark:text-yellow-200">
+              <strong>For developers:</strong> Make sure your environment variables are set in your deployment platform (Netlify, Vercel, etc.).
+            </p>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   // Show skeleton during initial load or before client-side mount
   if (!isMounted || loading) {
