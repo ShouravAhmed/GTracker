@@ -463,9 +463,13 @@ export function useSolves() {
 
   // Login function
   const triggerLogin = useCallback(async (): Promise<void> => {
+    // Always use window.location.origin in client-side to get the actual deployed URL
     const redirectTo = typeof window !== 'undefined'
       ? `${window.location.origin}/auth/callback`
-      : `${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/auth/callback`
+      : `${process.env.NEXT_PUBLIC_SITE_URL || process.env.VERCEL_URL || 'http://localhost:3000'}/auth/callback`
+
+    console.log('[SOLVES CLIENT] OAuth redirect URL:', redirectTo)
+    console.log('[SOLVES CLIENT] Window origin:', typeof window !== 'undefined' ? window.location.origin : 'N/A')
 
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
@@ -479,7 +483,7 @@ export function useSolves() {
     })
 
     if (error) {
-      console.error('Error signing in with Google:', error)
+      console.error('[SOLVES CLIENT] Error signing in with Google:', error)
       throw error
     }
   }, [supabase.auth])
