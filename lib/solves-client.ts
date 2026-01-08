@@ -59,22 +59,30 @@ export function useSolves() {
   const {
     data: problems = [],
     isLoading: problemsLoading,
+    error: problemsError,
   } = useQuery({
     queryKey: QUERY_KEYS.problems,
     queryFn: async () => {
-      const allProblems = await getAllProblems()
-      if (allProblems.length === 0) {
-        console.warn('⚠️ No problems found in database. Please run: npm run upload-150day-problems')
-      } else {
-        console.log(`✅ Loaded ${allProblems.length} problems from database`)
+      try {
+        const allProblems = await getAllProblems()
+        if (allProblems.length === 0) {
+          console.warn('⚠️ No problems found in database. Please run: npm run upload-150day-problems')
+        } else {
+          console.log(`✅ Loaded ${allProblems.length} problems from database`)
+        }
+        return allProblems
+      } catch (error) {
+        console.error('Error fetching problems:', error)
+        // Return empty array instead of throwing to prevent app crash
+        return []
       }
-      return allProblems
     },
     staleTime: 30 * 60 * 1000, // 30 minutes - problems rarely change
     gcTime: 60 * 60 * 1000, // 1 hour
     refetchOnWindowFocus: false,
     refetchOnMount: false,
     refetchOnReconnect: false,
+    retry: 1, // Retry once on failure
   })
 
   // Fetch solve counts (cached for 10 minutes)
@@ -176,7 +184,7 @@ export function useSolves() {
     }
   }, [supabase.auth, queryClient])
 
-  const loading = problemsLoading || countsLoading || solvesLoading || moduleStartsLoading || progressLoading || progressLoading
+  const loading = problemsLoading || countsLoading || solvesLoading || moduleStartsLoading || progressLoading
 
   // Get problem status
   const getProblemStatus = useCallback((problemId: string): boolean => {
