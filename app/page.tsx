@@ -4,7 +4,14 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { materialSets } from '@/lib/material-sets'
 
-console.log('[HOME PAGE] Script loaded - Starting initialization')
+// Immediate logging - runs when module loads
+if (typeof window !== 'undefined') {
+  console.log('[HOME PAGE] ✅ Script loaded in browser - Starting initialization')
+  console.log('[HOME PAGE] Window location:', window.location.href)
+  console.log('[HOME PAGE] Document ready state:', document.readyState)
+} else {
+  console.log('[HOME PAGE] Script loaded on server - Starting initialization')
+}
 
 export default function Home() {
   console.log('[HOME PAGE] Component function called - Rendering started')
@@ -20,6 +27,8 @@ export default function Home() {
   useEffect(() => {
     console.log('[HOME PAGE] useEffect - Mount check running')
     console.log('[HOME PAGE] Current isMounted state:', isMounted)
+    console.log('[HOME PAGE] typeof window:', typeof window)
+    console.log('[HOME PAGE] typeof document:', typeof document)
     setIsMounted(true)
     console.log('[HOME PAGE] isMounted set to true')
   }, [])
@@ -32,6 +41,28 @@ export default function Home() {
       console.log('[HOME PAGE] Total modules:', materialSets.reduce((acc, set) => acc + set.modules.length, 0))
     }
   }, [isMounted])
+
+  // Catch any errors
+  useEffect(() => {
+    const handleError = (event: ErrorEvent) => {
+      console.error('[HOME PAGE] ❌ Global error caught:', event.error)
+      console.error('[HOME PAGE] Error message:', event.message)
+      console.error('[HOME PAGE] Error filename:', event.filename)
+      console.error('[HOME PAGE] Error lineno:', event.lineno)
+    }
+    
+    const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
+      console.error('[HOME PAGE] ❌ Unhandled promise rejection:', event.reason)
+    }
+
+    window.addEventListener('error', handleError)
+    window.addEventListener('unhandledrejection', handleUnhandledRejection)
+
+    return () => {
+      window.removeEventListener('error', handleError)
+      window.removeEventListener('unhandledrejection', handleUnhandledRejection)
+    }
+  }, [])
 
   /**
    * Handles clicking on a module card - navigates to the module page
@@ -57,21 +88,10 @@ export default function Home() {
     }
   }
 
-  // Show loading state during initial mount
-  if (!isMounted) {
-    console.log('[HOME PAGE] Rendering loading state (not mounted yet)')
-    return (
-      <div className="min-h-screen bg-white dark:bg-gray-900 px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
-        <div className="max-w-7xl mx-auto">
-          <div className="text-center py-12">
-            <p className="text-gray-600 dark:text-gray-400">Loading...</p>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
+  // Always render content - don't block on isMounted
+  // This ensures the page is visible even if hydration is delayed
   console.log('[HOME PAGE] Rendering main content with', materialSets.length, 'material sets')
+  console.log('[HOME PAGE] isMounted state:', isMounted)
 
   return (
     <div className="min-h-screen bg-white dark:bg-gray-900 px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
