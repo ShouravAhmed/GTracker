@@ -74,13 +74,18 @@ export default function Navbar() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           {/* Left side - Brand */}
-          <Link
-            href="/"
-            className="flex items-center gap-2 text-gray-900 dark:text-white hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
-          >
-            <Target className="w-6 h-6 sm:w-7 sm:h-7" />
-            <span className="text-lg sm:text-xl font-bold">GAMAM Tracker</span>
-          </Link>
+          <div className="flex items-center gap-3">
+            <Link
+              href="/"
+              className="flex items-center gap-2 text-gray-900 dark:text-white hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+            >
+              <Target className="w-6 h-6 sm:w-7 sm:h-7" />
+              <span className="text-lg sm:text-xl font-bold">GAMAM Tracker</span>
+            </Link>
+            <span className="px-2 py-0.5 text-xs font-semibold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 rounded-md">
+              BETA
+            </span>
+          </div>
 
           {/* Right side - Theme toggle and Auth buttons */}
           <div className="flex items-center gap-4">
