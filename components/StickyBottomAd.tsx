@@ -14,7 +14,7 @@ const AD_CHECK_DELAY = 3000 // Check if ad loaded after 3 seconds
 export default function StickyBottomAd() {
   const [isVisible, setIsVisible] = useState(false)
   const [showFallback, setShowFallback] = useState(false)
-  const adRef = useRef<HTMLDivElement>(null)
+  const adRef = useRef<HTMLModElement>(null)
   const timeoutRef = useRef<NodeJS.Timeout | null>(null)
   const adCheckRef = useRef<NodeJS.Timeout | null>(null)
 
