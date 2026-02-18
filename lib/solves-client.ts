@@ -2,6 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useCallback, useEffect } from 'react'
+import { useToast } from '@/components/Toast'
 import { createClient } from './supabase/client'
 import {
   getAllProblems,
@@ -40,6 +41,7 @@ const QUERY_KEYS = {
 export function useSolves() {
   const queryClient = useQueryClient()
   const supabase = createClient()
+  const { showToast } = useToast()
 
   // Check authentication
   const { data: isAuthenticated = false } = useQuery({
@@ -231,13 +233,12 @@ export function useSolves() {
       return { previousSolves }
     },
     onError: (_err, _variables, context) => {
-      // Rollback on error
       if (context?.previousSolves) {
         queryClient.setQueryData(QUERY_KEYS.userSolves, context.previousSolves)
       }
+      showToast('Failed to save changes. Please try again.')
     },
     onSettled: () => {
-      // Only invalidate if mutation succeeded - optimistic update already handled UI
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.userSolves })
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.moduleProgress })
     },
@@ -302,9 +303,9 @@ export function useSolves() {
       if (context?.previousSolves) {
         queryClient.setQueryData(QUERY_KEYS.userSolves, context.previousSolves)
       }
+      showToast('Failed to save changes. Please try again.')
     },
     onSettled: () => {
-      // Only invalidate if mutation succeeded - optimistic update already handled UI
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.userSolves })
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.moduleProgress })
     },
@@ -325,7 +326,9 @@ export function useSolves() {
   const startProblemMutation = useMutation({
     mutationFn: async (problemId: string) => {
       if (!isAuthenticated) return false
-      await startProblemServer(problemId)
+      // Server action returns false on failure; treat as error so we don't refetch and overwrite optimistic state
+      const ok = await startProblemServer(problemId)
+      if (!ok) throw new Error('Failed to start problem')
       return true
     },
     onMutate: async (problemId: string) => {
@@ -364,9 +367,11 @@ export function useSolves() {
       if (context?.previousSolves) {
         queryClient.setQueryData(QUERY_KEYS.userSolves, context.previousSolves)
       }
+      showToast('Failed to start problem. Please try again.')
     },
-    onSettled: () => {
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.userSolves })
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.moduleProgress })
     },
   })
 
@@ -381,7 +386,8 @@ export function useSolves() {
   const updateFocusTimeMutation = useMutation({
     mutationFn: async ({ problemId, additionalSeconds }: { problemId: string; additionalSeconds: number }) => {
       if (!isAuthenticated) return false
-      await updateFocusTimeServer(problemId, additionalSeconds)
+      const ok = await updateFocusTimeServer(problemId, additionalSeconds)
+      if (!ok) throw new Error('Failed to save focus time')
       return true
     },
     onMutate: async ({ problemId, additionalSeconds }) => {
@@ -405,6 +411,7 @@ export function useSolves() {
       if (context?.previousSolves) {
         queryClient.setQueryData(QUERY_KEYS.userSolves, context.previousSolves)
       }
+      showToast('Failed to save focus time. Please try again.')
     },
   })
 
@@ -419,7 +426,8 @@ export function useSolves() {
   const updateNoteMutation = useMutation({
     mutationFn: async ({ problemId, note }: { problemId: string; note: string }) => {
       if (!isAuthenticated) return false
-      await updateProblemNoteServer(problemId, note)
+      const ok = await updateProblemNoteServer(problemId, note)
+      if (!ok) throw new Error('Failed to save note')
       return true
     },
     onMutate: async ({ problemId, note }) => {
@@ -451,6 +459,7 @@ export function useSolves() {
       if (context?.previousSolves) {
         queryClient.setQueryData(QUERY_KEYS.userSolves, context.previousSolves)
       }
+      showToast('Failed to save note. Please try again.')
     },
   })
 
@@ -492,15 +501,15 @@ export function useSolves() {
     },
     onSuccess: (success, moduleType) => {
       if (success) {
-        // Optimistically update module starts
         queryClient.setQueryData<Record<string, boolean>>(QUERY_KEYS.moduleStarts, (old = {}) => ({
           ...old,
           [moduleType]: true,
         }))
-        // Invalidate module progress since starting a module affects progress calculation
         if (moduleType === 'all') {
           queryClient.invalidateQueries({ queryKey: QUERY_KEYS.moduleProgress })
         }
+      } else {
+        showToast('Failed to start module. Please try again.')
       }
     },
   })
@@ -529,9 +538,11 @@ export function useSolves() {
     const success = await updateCurrentDay(newDay)
     if (success) {
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.moduleProgress })
+    } else {
+      showToast('Failed to update day. Please try again.')
     }
     return success
-  }, [isAuthenticated, queryClient])
+  }, [isAuthenticated, queryClient, showToast])
 
   // Refresh data function
   const refreshData = useCallback(() => {

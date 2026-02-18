@@ -3,6 +3,7 @@ import Script from 'next/script'
 import './globals.css'
 import Navbar from '@/components/Navbar'
 import { ThemeProvider } from '@/components/ThemeProvider'
+import { ToastProvider } from '@/components/Toast'
 import { QueryProvider } from '@/lib/query-client'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import StickyBottomAd from '@/components/StickyBottomAd'
@@ -58,9 +59,11 @@ export default function RootLayout({
         <ErrorBoundary>
           <QueryProvider>
             <ThemeProvider>
-              <Navbar />
-              <main className="pt-16">{children}</main>
-              <StickyBottomAd />
+              <ToastProvider>
+                <Navbar />
+                <main className="pt-16">{children}</main>
+                <StickyBottomAd />
+              </ToastProvider>
             </ThemeProvider>
           </QueryProvider>
         </ErrorBoundary>
