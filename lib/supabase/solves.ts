@@ -297,23 +297,26 @@ export async function toggleProblemStatus(problemId: string): Promise<boolean> {
  * Multiple problems can be in progress at once.
  * State changes of one problem don't affect others.
  */
-export async function startProblem(problemId: string): Promise<boolean> {
+export type StartProblemResult = { ok: true } | { ok: false; reason: string }
+
+export async function startProblem(problemId: string): Promise<StartProblemResult> {
   try {
     console.log('[startProblem] Server: starting for problemId', problemId)
     const supabase = await createClient()
 
     const { data: { user }, error: authError } = await supabase.auth.getUser()
     if (authError) {
-      console.error('[startProblem] Server: auth.getUser error', authError)
-      return false
+      const msg = `auth.getUser: ${authError.message}`
+      console.error('[startProblem] Server:', msg)
+      return { ok: false, reason: msg }
     }
     if (!user) {
-      console.warn('[startProblem] Server: no user (not authenticated)')
-      return false
+      const msg = 'Not authenticated (no user from cookies)'
+      console.warn('[startProblem] Server:', msg)
+      return { ok: false, reason: msg }
     }
     console.log('[startProblem] Server: user id', user.id)
 
-    // Get existing solve data to preserve focus_time (use maybeSingle so 0 rows is ok)
     const { data: existingSolve, error: fetchError } = await supabase
       .from('user_solves')
       .select('focus_time, solved_at')
@@ -322,8 +325,9 @@ export async function startProblem(problemId: string): Promise<boolean> {
       .maybeSingle()
 
     if (fetchError) {
-      console.error('[startProblem] Server: fetch existing solve error', fetchError)
-      return false
+      const msg = `fetch existing solve: ${fetchError.message} (${fetchError.code ?? 'no code'})`
+      console.error('[startProblem] Server:', msg)
+      return { ok: false, reason: msg }
     }
 
     const now = new Date().toISOString()
@@ -344,8 +348,9 @@ export async function startProblem(problemId: string): Promise<boolean> {
       })
 
     if (error) {
-      console.error('[startProblem] Server: upsert error', error)
-      return false
+      const msg = `upsert: ${error.message} (${error.code ?? 'no code'})`
+      console.error('[startProblem] Server:', msg)
+      return { ok: false, reason: msg }
     }
 
     console.log('[startProblem] Server: success')
@@ -354,10 +359,11 @@ export async function startProblem(problemId: string): Promise<boolean> {
     } catch (revalidateErr: any) {
       console.warn('[startProblem] revalidatePath failed (non-fatal):', revalidateErr?.message ?? revalidateErr)
     }
-    return true
+    return { ok: true }
   } catch (error: any) {
-    console.error('[startProblem] Server: caught error', error?.message ?? error)
-    return false
+    const msg = String(error?.message ?? error)
+    console.error('[startProblem] Server: caught error', msg)
+    return { ok: false, reason: msg }
   }
 }
 

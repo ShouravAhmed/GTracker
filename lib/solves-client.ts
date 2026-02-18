@@ -330,9 +330,13 @@ export function useSolves() {
         return false
       }
       console.log('[startProblem] Calling server for problemId:', problemId)
-      const ok = await startProblemServer(problemId)
-      console.log('[startProblem] Server returned:', ok)
-      if (!ok) throw new Error('Failed to start problem')
+      const result = await startProblemServer(problemId)
+      console.log('[startProblem] Server returned:', result)
+      if (!result.ok) {
+        const msg = result.reason ?? 'Unknown error'
+        console.error('[startProblem] Server failure reason:', msg)
+        throw new Error(msg)
+      }
       return true
     },
     onMutate: async (problemId: string) => {
@@ -368,11 +372,12 @@ export function useSolves() {
       return { previousSolves }
     },
     onError: (err, problemId, context) => {
-      console.error('[startProblem] Mutation error:', err, 'problemId:', problemId)
+      const reason = err instanceof Error ? err.message : String(err)
+      console.error('[startProblem] Mutation error:', reason, 'problemId:', problemId)
       if (context?.previousSolves) {
         queryClient.setQueryData(QUERY_KEYS.userSolves, context.previousSolves)
       }
-      showToast('Failed to start problem. Please try again.')
+      showToast(`Failed to start problem. ${reason}`)
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.userSolves })
