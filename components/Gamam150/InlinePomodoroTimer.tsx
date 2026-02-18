@@ -33,6 +33,7 @@ export function InlinePomodoroTimer({
   const startTimeRef = useRef<number | null>(null)
   const svgRef = useRef<SVGSVGElement>(null)
   const lastSavedTimeRef = useRef<number>(0)
+  const originalTitleRef = useRef<string | null>(null)
 
   // Clock dimensions
   const CLOCK_SIZE = 300
@@ -185,6 +186,32 @@ export function InlinePomodoroTimer({
       }
     }
   }, [isRunning, initialMinutes, onComplete, onUpdate, onElapsedChange])
+
+  // Update tab title with focus time when timer is running
+  useEffect(() => {
+    const formatElapsed = (totalSeconds: number) => {
+      const m = Math.floor(totalSeconds / 60)
+      const s = totalSeconds % 60
+      return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+    }
+    if (isRunning) {
+      if (originalTitleRef.current === null) {
+        originalTitleRef.current = document.title
+      }
+      document.title = `${formatElapsed(elapsedSeconds)} – ${problemName}`
+    } else {
+      if (originalTitleRef.current !== null) {
+        document.title = originalTitleRef.current
+        originalTitleRef.current = null
+      }
+    }
+    return () => {
+      if (originalTitleRef.current !== null) {
+        document.title = originalTitleRef.current
+        originalTitleRef.current = null
+      }
+    }
+  }, [isRunning, elapsedSeconds, problemName])
 
   const handleStart = () => {
     if (!isRunning) {
