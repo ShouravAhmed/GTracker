@@ -299,24 +299,36 @@ export async function toggleProblemStatus(problemId: string): Promise<boolean> {
  */
 export async function startProblem(problemId: string): Promise<boolean> {
   try {
+    console.log('[startProblem] Server: starting for problemId', problemId)
     const supabase = await createClient()
 
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) {
-      throw new Error('User not authenticated')
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    if (authError) {
+      console.error('[startProblem] Server: auth.getUser error', authError)
+      return false
     }
+    if (!user) {
+      console.warn('[startProblem] Server: no user (not authenticated)')
+      return false
+    }
+    console.log('[startProblem] Server: user id', user.id)
 
-    // Get existing solve data to preserve focus_time
-    const { data: existingSolve } = await supabase
+    // Get existing solve data to preserve focus_time (use maybeSingle so 0 rows is ok)
+    const { data: existingSolve, error: fetchError } = await supabase
       .from('user_solves')
       .select('focus_time, solved_at')
       .eq('user_id', user.id)
       .eq('problem_id', problemId)
-      .single()
+      .maybeSingle()
+
+    if (fetchError) {
+      console.error('[startProblem] Server: fetch existing solve error', fetchError)
+      return false
+    }
 
     const now = new Date().toISOString()
+    const focusTime = existingSolve?.focus_time ?? 0
 
-    // Start the problem: set started_at to now, clear solved_at, set solved to false
     const { error } = await supabase
       .from('user_solves')
       .upsert({
@@ -324,22 +336,27 @@ export async function startProblem(problemId: string): Promise<boolean> {
         problem_id: problemId,
         solved: false,
         started_at: now,
-        solved_at: null, // Clear solved_at when starting
-        focus_time: existingSolve?.focus_time ?? 0, // Preserve existing focus time
+        solved_at: null,
+        focus_time: focusTime,
         updated_at: now,
       }, {
         onConflict: 'user_id,problem_id'
       })
 
     if (error) {
-      console.error('Error starting problem:', error)
+      console.error('[startProblem] Server: upsert error', error)
       return false
     }
 
-    revalidatePath('/gamam-150')
+    console.log('[startProblem] Server: success')
+    try {
+      revalidatePath('/gamam-150')
+    } catch (revalidateErr: any) {
+      console.warn('[startProblem] revalidatePath failed (non-fatal):', revalidateErr?.message ?? revalidateErr)
+    }
     return true
   } catch (error: any) {
-    console.error('Error in startProblem:', error)
+    console.error('[startProblem] Server: caught error', error?.message ?? error)
     return false
   }
 }

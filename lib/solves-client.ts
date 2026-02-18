@@ -325,9 +325,13 @@ export function useSolves() {
   // Start problem mutation
   const startProblemMutation = useMutation({
     mutationFn: async (problemId: string) => {
-      if (!isAuthenticated) return false
-      // Server action returns false on failure; treat as error so we don't refetch and overwrite optimistic state
+      if (!isAuthenticated) {
+        console.warn('[startProblem] Not authenticated, skipping')
+        return false
+      }
+      console.log('[startProblem] Calling server for problemId:', problemId)
       const ok = await startProblemServer(problemId)
+      console.log('[startProblem] Server returned:', ok)
       if (!ok) throw new Error('Failed to start problem')
       return true
     },
@@ -363,7 +367,8 @@ export function useSolves() {
 
       return { previousSolves }
     },
-    onError: (_err, _variables, context) => {
+    onError: (err, problemId, context) => {
+      console.error('[startProblem] Mutation error:', err, 'problemId:', problemId)
       if (context?.previousSolves) {
         queryClient.setQueryData(QUERY_KEYS.userSolves, context.previousSolves)
       }
