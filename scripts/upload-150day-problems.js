@@ -57,8 +57,8 @@ async function uploadProblems() {
     console.log('✅ Connected to Supabase')
     console.log('')
 
-    // Read the JSON file
-    const jsonPath = path.join(__dirname, '..', 'src', 'assets', 'json', 'gamam150.json')
+    // Read the JSON file (standard location: project data folder)
+    const jsonPath = path.join(__dirname, '..', 'data', 'gamam150.json')
     if (!fs.existsSync(jsonPath)) {
       console.error(`❌ Error: JSON file not found at ${jsonPath}`)
       process.exit(1)

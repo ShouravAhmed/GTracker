@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "next lint",
     "migrate": "node scripts/run-migration.js",
-    "upload-150day-problems": "node scripts/upload-150day-problems.js"
+    "upload-150day-problems": "node scripts/upload-150day-problems.js",
+    "check-db": "node scripts/check-db.js"
   },
   "dependencies": {
     "@supabase/ssr": "^0.8.0",

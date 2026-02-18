@@ -59,6 +59,7 @@ export function useSolves() {
   const {
     data: problems = [],
     isLoading: problemsLoading,
+    isFetching: problemsFetching,
     error: problemsError,
   } = useQuery({
     queryKey: QUERY_KEYS.problems,
@@ -80,7 +81,7 @@ export function useSolves() {
     staleTime: 30 * 60 * 1000, // 30 minutes - problems rarely change
     gcTime: 60 * 60 * 1000, // 1 hour
     refetchOnWindowFocus: false,
-    refetchOnMount: false,
+    refetchOnMount: true, // Refetch when page loads so /gamam-150 shows data after DB seed
     refetchOnReconnect: false,
     retry: 1, // Retry once on failure
   })
@@ -184,7 +185,16 @@ export function useSolves() {
     }
   }, [supabase.auth, queryClient])
 
-  const loading = problemsLoading || countsLoading || solvesLoading || moduleStartsLoading || progressLoading
+  // Keep showing loading when we have no problems but the problems query is still in flight
+  // (avoids showing "0 items" on home cards before fetch completes)
+  const problemsNotReady = problems.length === 0 && (problemsLoading || problemsFetching)
+  const loading =
+    problemsLoading ||
+    countsLoading ||
+    solvesLoading ||
+    moduleStartsLoading ||
+    progressLoading ||
+    problemsNotReady
 
   // Get problem status
   const getProblemStatus = useCallback((problemId: string): boolean => {

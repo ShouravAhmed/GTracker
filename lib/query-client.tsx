@@ -6,6 +6,9 @@ import { useState, useEffect, useRef } from 'react'
 const PERSISTENCE_KEY = 'GAMAM_QUERY_CACHE'
 const MAX_CACHE_AGE = 24 * 60 * 60 * 1000 // 24 hours
 
+// Query keys we never restore from cache - always fetch fresh from server
+const SKIP_RESTORE_KEYS = [['problems']]
+
 // Helper to restore cache from localStorage
 function restoreCache(): Record<string, any> | undefined {
   if (typeof window === 'undefined') return undefined
@@ -81,7 +84,11 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
             if (value && value.data !== undefined) {
               try {
                 const queryKey = JSON.parse(key)
-                const dataUpdatedAt = value.dataUpdatedAt || Date.now()
+                // Never restore problems query - always fetch from DB so cards show correct totals
+                const skipRestore = SKIP_RESTORE_KEYS.some(
+                  (skip) => skip.length === queryKey.length && skip.every((s, i) => s === queryKey[i])
+                )
+                if (skipRestore) return
 
                 // Set the query in cache with proper state
                 client.setQueryData(queryKey, value.data)
@@ -119,6 +126,12 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
         const cacheData: Record<string, any> = {}
 
         cache.getAll().forEach((query) => {
+          const skipPersist = SKIP_RESTORE_KEYS.some(
+            (skip) =>
+              skip.length === query.queryKey.length &&
+              skip.every((s, i) => s === query.queryKey[i])
+          )
+          if (skipPersist) return
           if (query.state.data !== undefined && query.state.status === 'success') {
             cacheData[JSON.stringify(query.queryKey)] = {
               data: query.state.data,
