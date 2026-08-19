@@ -81,13 +81,19 @@ export default function Home() {
       return
     }
 
-    const stats = moduleStats[moduleId]
-    if (stats?.firstProblemId) {
-      await startProblem(stats.firstProblemId)
-      // Navigate to the module page
-      if (module.route !== '#') {
-        router.push(module.route)
+    // Only start the first problem the first time the module is started.
+    // Once started, this button becomes "Continue"/"View" and must not
+    // re-trigger startProblem, or an already-solved first problem would be
+    // reset back to in-progress every time the card is clicked.
+    if (!checkModuleStarted(module.type)) {
+      const stats = moduleStats[moduleId]
+      if (stats?.firstProblemId) {
+        await startProblem(stats.firstProblemId)
       }
+    }
+
+    if (module.route !== '#') {
+      router.push(module.route)
     }
   }
 

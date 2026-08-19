@@ -22,6 +22,10 @@ export interface UserSolve {
   started_at?: string
   solved_at?: string
   focus_time: number
+  rating?: number | null
+  rated_at?: string | null
+  followup?: boolean
+  followup_at?: string | null
   created_at: string
   updated_at: string
 }
@@ -288,6 +292,93 @@ export async function toggleProblemStatus(problemId: string): Promise<boolean> {
     return !isCurrentlySolved
   } catch (error: any) {
     console.error('Error in toggleProblemStatus:', error)
+    return false
+  }
+}
+
+/**
+ * Set or clear the 1-10 rating for a problem (upsert)
+ */
+export async function updateProblemRating(
+  problemId: string,
+  rating: number | null
+): Promise<boolean> {
+  try {
+    const supabase = await createClient()
+
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) {
+      throw new Error('User not authenticated')
+    }
+
+    const { error } = await supabase
+      .from('user_solves')
+      .upsert({
+        user_id: user.id,
+        problem_id: problemId,
+        rating,
+        rated_at: rating === null ? null : new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }, {
+        onConflict: 'user_id,problem_id'
+      })
+
+    if (error) {
+      console.error('Error updating rating:', error)
+      return false
+    }
+
+    revalidatePath('/gamam-150')
+    return true
+  } catch (error: any) {
+    console.error('Error in updateProblemRating:', error)
+    return false
+  }
+}
+
+/**
+ * Toggle the follow-up flag for a problem
+ */
+export async function toggleProblemFollowup(problemId: string): Promise<boolean> {
+  try {
+    const supabase = await createClient()
+
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) {
+      throw new Error('User not authenticated')
+    }
+
+    const { data: existing } = await supabase
+      .from('user_solves')
+      .select('followup')
+      .eq('user_id', user.id)
+      .eq('problem_id', problemId)
+      .single()
+
+    const nextFollowup = !(existing?.followup ?? false)
+    const now = new Date().toISOString()
+
+    const { error } = await supabase
+      .from('user_solves')
+      .upsert({
+        user_id: user.id,
+        problem_id: problemId,
+        followup: nextFollowup,
+        followup_at: nextFollowup ? now : null,
+        updated_at: now,
+      }, {
+        onConflict: 'user_id,problem_id'
+      })
+
+    if (error) {
+      console.error('Error toggling follow-up:', error)
+      return !nextFollowup
+    }
+
+    revalidatePath('/gamam-150')
+    return nextFollowup
+  } catch (error: any) {
+    console.error('Error in toggleProblemFollowup:', error)
     return false
   }
 }

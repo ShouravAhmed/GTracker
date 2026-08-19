@@ -1,13 +1,13 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { useSolves } from '@/lib/solves-client'
-import { Play, Timer, NotepadText, Users, Clock, CheckCircle, TrendingUp, CheckCircle2, Calendar } from 'lucide-react'
+import { Play, Clock, TrendingUp, CheckCircle2, Calendar } from 'lucide-react'
 import { SkeletonLoader } from './Gamam150/SkeletonLoader'
-import { InlinePomodoroTimer } from './Gamam150/InlinePomodoroTimer'
-import { InlineNoteEditor } from './Gamam150/InlineNoteEditor'
-import { getTimeComponents, getGlassMorphismStyles } from './Gamam150/utils'
+import { ProblemRow } from './Gamam150/ProblemRow'
+import { ProblemFilterSortBar, type SortField, type SortDir } from './Gamam150/ProblemFilterSortBar'
 import type { ProblemData, ExpandedProblem } from './Gamam150/types'
+import type { Problem as DBProblem } from '@/lib/supabase/solves'
 
 export default function Gamam150() {
   const {
@@ -24,6 +24,8 @@ export default function Gamam150() {
     startProblem,
     updateFocusTime,
     updateNote,
+    updateRating,
+    toggleFollowup,
     triggerLogin,
     startModule,
     checkModuleStarted,
@@ -42,6 +44,12 @@ export default function Gamam150() {
   const [isSchemaDesignChecked, setIsSchemaDesignChecked] = useState(true)
   const [isApiDesignChecked, setIsApiDesignChecked] = useState(true)
   const [isBehavioralChecked, setIsBehavioralChecked] = useState(true)
+
+  const [filterFollowup, setFilterFollowup] = useState(false)
+  const [filterStarred, setFilterStarred] = useState(false)
+  const [sortField, setSortField] = useState<SortField>('followup_at')
+  const [sortDir, setSortDir] = useState<SortDir>('desc')
+  const hasAutoScrolled = useRef(false)
 
   // Organize problems by day and filter by category
   useEffect(() => {
@@ -283,6 +291,22 @@ export default function Gamam150() {
     })
   }
 
+  const handleRate = async (problemId: string, rating: number | null) => {
+    if (!isAuthenticated) {
+      await triggerLogin()
+      return
+    }
+    await updateRating(problemId, rating)
+  }
+
+  const handleToggleFollowup = async (problemId: string) => {
+    if (!isAuthenticated) {
+      await triggerLogin()
+      return
+    }
+    await toggleFollowup(problemId)
+  }
+
 
   const totalSolved = useMemo(() => {
     return Object.values(codingProblems).reduce((total, problems) => {
@@ -318,6 +342,144 @@ export default function Gamam150() {
     if (firstProblemId) {
       await startProblem(firstProblemId)
     }
+  }
+
+  // Flat, day-order list of every currently-filtered problem (category
+  // checkboxes already applied via codingProblems)
+  const allProblemsInOrder = useMemo(() => {
+    return Object.values(codingProblems).flat()
+  }, [codingProblems])
+
+  // Problems shown when the Follow-up/Starred filters are active: flattened
+  // across all days (day/category grouping doesn't apply) and sorted
+  const filteredSortedProblems = useMemo(() => {
+    if (!filterFollowup && !filterStarred) return null
+
+    const matching = allProblemsInOrder.filter(problem => {
+      const solve = getUserSolve(problem.id)
+      if (filterFollowup && !solve?.followup) return false
+      if (filterStarred && (solve?.rating === undefined || solve?.rating === null)) return false
+      return true
+    })
+
+    const dir = sortDir === 'asc' ? 1 : -1
+    return [...matching].sort((a, b) => {
+      const solveA = getUserSolve(a.id)
+      const solveB = getUserSolve(b.id)
+      if (sortField === 'rating') {
+        return ((solveA?.rating ?? 0) - (solveB?.rating ?? 0)) * dir
+      }
+      const fieldName = sortField === 'followup_at' ? 'followup_at' : 'rated_at'
+      const timeA = solveA?.[fieldName] ? new Date(solveA[fieldName] as string).getTime() : 0
+      const timeB = solveB?.[fieldName] ? new Date(solveB[fieldName] as string).getTime() : 0
+      return (timeA - timeB) * dir
+    })
+  }, [allProblemsInOrder, filterFollowup, filterStarred, sortField, sortDir, getUserSolve])
+
+  // Auto-scroll to the first unsolved problem once, on entering the page
+  const firstUnsolvedProblemId = useMemo(() => {
+    return allProblemsInOrder.find(problem => !getProblemStatus(problem.id))?.id
+  }, [allProblemsInOrder, getProblemStatus])
+
+  useEffect(() => {
+    if (hasAutoScrolled.current) return
+    if (!moduleHasStarted || filteredSortedProblems) return
+    if (!firstUnsolvedProblemId) return
+
+    hasAutoScrolled.current = true
+    const timeout = setTimeout(() => {
+      document.getElementById(`problem-${firstUnsolvedProblemId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }, 100)
+    return () => clearTimeout(timeout)
+  }, [firstUnsolvedProblemId, moduleHasStarted, filteredSortedProblems])
+
+  // Shared row renderer for the flat filtered list, the "Day 127-150"
+  // category-grouped list, and the regular day list
+  const renderProblemRow = (problem: DBProblem, index: number) => {
+    const isSolved = getProblemStatus(problem.id)
+    const userSolve = getUserSolve(problem.id)
+    const solveCount = solveCounts[problem.id] || 0
+    const hasStarted = !!userSolve?.started_at
+    const isInProgress = hasStarted && !isSolved
+
+    // Live "now" is deliberately not computed here (render must stay pure) —
+    // elapsedTimes is ticked every second by the effect above and covers
+    // this; until that first tick lands for a just-started problem, it
+    // briefly reads 0.
+    let solvingTime = 0
+    if (isInProgress && userSolve?.started_at) {
+      solvingTime = elapsedTimes[problem.id] ?? 0
+    } else if (isSolved && userSolve?.solved_at && userSolve?.started_at) {
+      solvingTime = elapsedTimes[problem.id] !== undefined
+        ? elapsedTimes[problem.id]
+        : Math.floor((new Date(userSolve.solved_at).getTime() - new Date(userSolve.started_at).getTime()) / 1000)
+    }
+
+    const isExpanded = expandedProblem?.id === problem.id && (expandedProblem.showNote || expandedProblem.showFocus)
+
+    return (
+      <ProblemRow
+        key={problem.id}
+        problem={problem}
+        index={index}
+        moduleHasStarted={moduleHasStarted}
+        isAuthenticated={isAuthenticated}
+        solvesLoading={solvesLoading}
+        isSolved={isSolved}
+        userSolve={userSolve}
+        solveCount={solveCount}
+        isExpanded={isExpanded}
+        solvingTime={solvingTime}
+        focusTimeElapsedForProblem={focusTimeElapsed[problem.id] || 0}
+        lastSavedTimeForProblem={lastSavedTimes[problem.id] || 0}
+        onToggleStatus={async () => {
+          if (!isAuthenticated) {
+            await triggerLogin()
+            return
+          }
+          await updateProblemStatus(problem.id)
+        }}
+        onStart={async () => {
+          if (!isAuthenticated) {
+            await triggerLogin()
+            return
+          }
+          await handleStartProblem(problem.id)
+        }}
+        onToggleFocus={async () => {
+          if (!moduleHasStarted) return
+          if (!isAuthenticated) {
+            await triggerLogin()
+            return
+          }
+          toggleFocus(problem.id)
+        }}
+        onToggleNote={async () => {
+          if (!moduleHasStarted) return
+          if (!isAuthenticated) {
+            await triggerLogin()
+            return
+          }
+          toggleNote(problem.id)
+        }}
+        onFocusTimeComplete={(seconds) => handleFocusTimeComplete(problem.id, seconds)}
+        onFocusTimeUpdate={(seconds) => handleFocusTimeUpdate(problem.id, seconds)}
+        onFocusElapsedChange={(seconds) => {
+          setFocusTimeElapsed(prev => ({ ...prev, [problem.id]: seconds }))
+          setLastSavedTimes(prev => {
+            if (!prev[problem.id]) {
+              return { ...prev, [problem.id]: 0 }
+            }
+            return prev
+          })
+        }}
+        onNoteSave={(content) => handleNoteSave(problem.id, content)}
+        onCloseFocusView={() => handleCloseFocusView(problem.id)}
+        onCloseNoteView={() => setExpandedProblem(null)}
+        onRate={(rating) => handleRate(problem.id, rating)}
+        onToggleFollowup={() => handleToggleFollowup(problem.id)}
+      />
+    )
   }
 
   // Show skeleton loader when data is loading or no problems available
@@ -550,8 +712,29 @@ export default function Gamam150() {
           </div>
         </div>
 
+        <ProblemFilterSortBar
+          filterFollowup={filterFollowup}
+          filterStarred={filterStarred}
+          onToggleFollowup={() => setFilterFollowup(prev => !prev)}
+          onToggleStarred={() => setFilterStarred(prev => !prev)}
+          sortField={sortField}
+          onSortFieldChange={setSortField}
+          sortDir={sortDir}
+          onToggleSortDir={() => setSortDir(prev => prev === 'asc' ? 'desc' : 'asc')}
+        />
+
         <div className="space-y-4 sm:space-y-6 mb-8 sm:mb-12">
-          {Object.keys(codingProblems).length === 0 ? (
+          {filteredSortedProblems ? (
+            filteredSortedProblems.length === 0 ? (
+              <div className="text-center py-12 text-gray-500 dark:text-gray-400">
+                No problems match the selected filters.
+              </div>
+            ) : (
+              <div className="relative overflow-hidden bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-5 sm:p-7 border border-gray-200/50 dark:border-gray-700/50 space-y-3">
+                {filteredSortedProblems.map((problem, idx) => renderProblemRow(problem, idx + 1))}
+              </div>
+            )
+          ) : Object.keys(codingProblems).length === 0 ? (
             <SkeletonLoader />
           ) : (
             Object.entries(codingProblems).map(([day, problems]) => {
@@ -628,1018 +811,23 @@ export default function Gamam150() {
                             {category}
                           </h4>
                           <div className="h-96 overflow-y-auto pr-2 space-y-3 scrollable-problem-list">
-                            {categoryProblems.map((problem) => {
-                              const isSolved = getProblemStatus(problem.id)
-                              const userSolve = getUserSolve(problem.id)
-                              const solveCount = solveCounts[problem.id] || 0
-                              const hasNote = userSolve?.note && userSolve.note.trim().length > 0
-                              const hasStarted = !!userSolve?.started_at
-                              const isInProgress = hasStarted && !isSolved
-
-                              // Calculate solving time
-                              // When in progress: now - started_at
-                              // When solved: solved_at - started_at
-                              let solvingTime: number = 0
-                              if (isInProgress && userSolve?.started_at) {
-                                // If in progress, show live elapsed time
-                                if (elapsedTimes[problem.id] !== undefined) {
-                                  solvingTime = elapsedTimes[problem.id]
-                                } else {
-                                  const startTime = new Date(userSolve.started_at).getTime()
-                                  solvingTime = Math.floor((Date.now() - startTime) / 1000)
-                                }
-                              } else if (isSolved && userSolve?.solved_at && userSolve?.started_at) {
-                                // If solved, show time from started_at to solved_at
-                                if (elapsedTimes[problem.id] !== undefined) {
-                                  solvingTime = elapsedTimes[problem.id]
-                                } else {
-                                  const startTime = new Date(userSolve.started_at).getTime()
-                                  const solvedTime = new Date(userSolve.solved_at).getTime()
-                                  solvingTime = Math.floor((solvedTime - startTime) / 1000)
-                                }
-                              }
-
-                              const isExpanded = expandedProblem?.id === problem.id && (expandedProblem.showNote || expandedProblem.showFocus)
-
-                              return (
-                                <div
-                                  key={problem.id}
-                                  className={`border-b border-gray-100/80 dark:border-gray-700/80 last:border-b-0 transition-all duration-300 ease-in-out hover:bg-gray-50/50 dark:hover:bg-gray-700/30 rounded-lg px-2 py-1 ${isSolved ? 'bg-green-50/30 dark:bg-green-900/10' : isInProgress ? 'bg-blue-50/30 dark:bg-blue-900/10' : ''
-                                    }`}
-                                >
-                                  {!isExpanded ? (
-                                    // Normal collapsed view
-                                    <div className="flex flex-col items-center md:grid md:grid-cols-[40px_minmax(0,1fr)_auto_auto_auto_auto_auto_140px] gap-3 md:gap-3 py-3 md:items-center">
-                                      <span className={`hidden md:block text-center font-bold text-gray-700 dark:text-gray-300 text-sm sm:text-base ${!moduleHasStarted ? 'opacity-60' : ''}`}>
-                                        {categoryProblems.indexOf(problem) + 1}
-                                      </span>
-                                      <div className={`flex items-center gap-2 ${!moduleHasStarted ? 'opacity-60' : ''} min-w-0 w-full md:w-auto`}>
-                                        <span className="md:hidden font-bold text-gray-700 dark:text-gray-300 text-sm mr-1">
-                                          {categoryProblems.indexOf(problem) + 1}.
-                                        </span>
-                                        {moduleHasStarted ? (
-                                          <a
-                                            href={problem.url}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="text-blue-600 dark:text-blue-400 hover:underline text-sm sm:text-base truncate"
-                                            title={problem.name}
-                                          >
-                                            {problem.name}
-                                          </a>
-                                        ) : (
-                                          <span className="text-blue-600 dark:text-blue-400 text-sm sm:text-base truncate cursor-not-allowed">
-                                            {problem.name}
-                                          </span>
-                                        )}
-                                        <div className="flex items-center gap-1 text-xs sm:text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap shrink-0 ml-auto md:ml-0">
-                                          <Users size={14} />
-                                          <span>{solveCount}</span>
-                                        </div>
-                                      </div>
-
-                                      {/* Mobile Metadata Row */}
-                                      <div className="flex flex-wrap items-center justify-center gap-3 md:contents">
-                                        {/* Solving time column */}
-                                        <div className={`relative ${!moduleHasStarted ? 'opacity-60' : ''}`}>
-                                          <div className="flex flex-col gap-0.5">
-                                            <div className="grid grid-cols-3 gap-0.5">
-                                              {(() => {
-                                                const { hours, minutes, seconds: secs } = getTimeComponents(solvingTime)
-                                                return (
-                                                  <>
-                                                    <div className="flex flex-col items-center justify-center px-1.5 py-1 rounded-lg bg-gray-100/50 dark:bg-gray-800/50 backdrop-blur-sm border border-gray-200/50 dark:border-gray-700/50 shadow-sm">
-                                                      <span className="text-xs sm:text-sm font-semibold text-amber-800 dark:text-amber-600">
-                                                        {String(hours).padStart(2, '0')}
-                                                      </span>
-                                                    </div>
-                                                    <div className="flex flex-col items-center justify-center px-1.5 py-1 rounded-lg bg-gray-100/50 dark:bg-gray-800/50 backdrop-blur-sm border border-gray-200/50 dark:border-gray-700/50 shadow-sm">
-                                                      <span className="text-xs sm:text-sm font-semibold text-amber-800 dark:text-amber-600">
-                                                        {String(minutes).padStart(2, '0')}
-                                                      </span>
-                                                    </div>
-                                                    <div className="flex flex-col items-center justify-center px-1.5 py-1 rounded-lg bg-gray-100/50 dark:bg-gray-800/50 backdrop-blur-sm border border-gray-200/50 dark:border-gray-700/50 shadow-sm">
-                                                      <span className="text-xs sm:text-sm font-semibold text-amber-800 dark:text-amber-600">
-                                                        {String(secs).padStart(2, '0')}
-                                                      </span>
-                                                    </div>
-                                                  </>
-                                                )
-                                              })()}
-                                            </div>
-                                            <span className="text-[8px] text-gray-500 dark:text-gray-400 text-center">
-                                              solving time
-                                            </span>
-                                          </div>
-                                        </div>
-                                        {/* Focus time column */}
-                                        <div className={`relative ${!moduleHasStarted ? 'opacity-60' : ''}`}>
-                                          <div className="flex flex-col gap-0.5">
-                                            <div className="grid grid-cols-3 gap-0.5">
-                                              {(() => {
-                                                const { hours, minutes, seconds: secs } = getTimeComponents(userSolve?.focus_time || 0)
-                                                return (
-                                                  <>
-                                                    <div className="flex flex-col items-center justify-center px-1.5 py-1 rounded-lg bg-gray-100/50 dark:bg-gray-800/50 backdrop-blur-sm border border-gray-200/50 dark:border-gray-700/50 shadow-sm">
-                                                      <span className="text-xs sm:text-sm font-semibold text-amber-800 dark:text-amber-600">
-                                                        {String(hours).padStart(2, '0')}
-                                                      </span>
-                                                    </div>
-                                                    <div className="flex flex-col items-center justify-center px-1.5 py-1 rounded-lg bg-gray-100/50 dark:bg-gray-800/50 backdrop-blur-sm border border-gray-200/50 dark:border-gray-700/50 shadow-sm">
-                                                      <span className="text-xs sm:text-sm font-semibold text-amber-800 dark:text-amber-600">
-                                                        {String(minutes).padStart(2, '0')}
-                                                      </span>
-                                                    </div>
-                                                    <div className="flex flex-col items-center justify-center px-1.5 py-1 rounded-lg bg-gray-100/50 dark:bg-gray-800/50 backdrop-blur-sm border border-gray-200/50 dark:border-gray-700/50 shadow-sm">
-                                                      <span className="text-xs sm:text-sm font-semibold text-amber-800 dark:text-amber-600">
-                                                        {String(secs).padStart(2, '0')}
-                                                      </span>
-                                                    </div>
-                                                  </>
-                                                )
-                                              })()}
-                                            </div>
-                                            <span className="text-[8px] text-gray-500 dark:text-gray-400 text-center">
-                                              focus time
-                                            </span>
-                                          </div>
-                                        </div>
-                                        {/* Type/Difficulty column */}
-                                        <div className={`relative ${!moduleHasStarted ? 'opacity-60' : ''}`}>
-                                          {(problem.type || problem.difficulty) && (
-                                            <button
-                                              className={`px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all duration-200 backdrop-blur-md border shadow-sm ${getGlassMorphismStyles(problem.difficulty)}`}
-                                            >
-                                              {problem.type && <span>{problem.type}</span>}
-                                              {problem.type && problem.difficulty && <span className="mx-1.5">•</span>}
-                                              {problem.difficulty && <span>{problem.difficulty}</span>}
-                                            </button>
-                                          )}
-                                        </div>
-                                      </div>
-
-                                      {/* Mobile Actions Row */}
-                                      <div className="flex items-center justify-center gap-2 w-full md:w-auto md:contents mt-1 md:mt-0">
-                                        {/* Focus button column */}
-                                        <div className={`relative ${!moduleHasStarted ? 'opacity-60' : ''}`}>
-                                          <button
-                                            onClick={async () => {
-                                              if (!moduleHasStarted) return
-                                              if (!isAuthenticated) {
-                                                await triggerLogin()
-                                                return
-                                              }
-                                              toggleFocus(problem.id)
-                                            }}
-                                            disabled={!moduleHasStarted}
-                                            className={`group flex flex-col items-center justify-center gap-0.5 px-3 py-2 rounded-lg transition-all ${moduleHasStarted
-                                              ? 'hover:bg-blue-50 dark:hover:bg-blue-900/20 cursor-pointer hover:scale-105'
-                                              : 'opacity-50 cursor-not-allowed'
-                                              }`}
-                                            title="Focus timer"
-                                          >
-                                            <div className={`p-1.5 rounded-lg transition-colors ${moduleHasStarted
-                                              ? 'bg-blue-100 dark:bg-blue-900/30 group-hover:bg-blue-200 dark:group-hover:bg-blue-900/50'
-                                              : 'bg-gray-100 dark:bg-gray-700'
-                                              }`}>
-                                              <Timer size={20} className="text-blue-600 dark:text-blue-400" />
-                                            </div>
-                                            <span className="text-[9px] leading-tight text-gray-600 dark:text-gray-400 font-medium">focus</span>
-                                          </button>
-                                        </div>
-                                        {/* Note button column */}
-                                        <div className={`relative ${!moduleHasStarted ? 'opacity-60' : ''}`}>
-                                          <button
-                                            onClick={async () => {
-                                              if (!moduleHasStarted) return
-                                              if (!isAuthenticated) {
-                                                await triggerLogin()
-                                                return
-                                              }
-                                              toggleNote(problem.id)
-                                            }}
-                                            disabled={!moduleHasStarted}
-                                            className={`group flex flex-col items-center justify-center gap-0.5 px-3 py-2 rounded-lg transition-all ${moduleHasStarted
-                                              ? 'hover:bg-green-50 dark:hover:bg-green-900/20 cursor-pointer hover:scale-105'
-                                              : 'opacity-50 cursor-not-allowed'
-                                              }`}
-                                            title="Edit note"
-                                          >
-                                            <div className={`p-1.5 rounded-lg transition-colors ${hasNote
-                                              ? 'bg-green-100 dark:bg-green-900/30 group-hover:bg-green-200 dark:group-hover:bg-green-900/50'
-                                              : moduleHasStarted
-                                                ? 'bg-gray-100 dark:bg-gray-700 group-hover:bg-gray-200 dark:group-hover:bg-gray-600'
-                                                : 'bg-gray-100 dark:bg-gray-700'
-                                              }`}>
-                                              <NotepadText
-                                                size={20}
-                                                className={hasNote ? 'text-green-600 dark:text-green-400' : 'text-gray-600 dark:text-gray-400'}
-                                              />
-                                            </div>
-                                            <span className="text-[9px] leading-tight text-gray-600 dark:text-gray-400 font-medium">note</span>
-                                          </button>
-                                        </div>
-                                        {/* State button column */}
-                                        <div className={`relative ${!moduleHasStarted ? 'opacity-60' : ''} flex-1 md:flex-none`}>
-                                          {solvesLoading && isAuthenticated ? (
-                                            <button
-                                              disabled
-                                              className="w-full min-h-[32px] sm:min-h-[36px] flex items-center justify-center px-3 sm:px-4 py-1.5 sm:py-2 rounded-full text-xs sm:text-sm font-bold text-white transition-colors bg-gray-500 dark:bg-gray-500 cursor-not-allowed"
-                                            >
-                                              Loading...
-                                            </button>
-                                          ) : !moduleHasStarted ? (
-                                            <button
-                                              disabled
-                                              className="w-full min-h-[32px] sm:min-h-[36px] flex items-center justify-center gap-1 px-3 sm:px-4 py-1.5 sm:py-2 bg-gray-400 dark:bg-gray-600 text-white rounded-full text-xs sm:text-sm font-bold cursor-not-allowed opacity-60"
-                                            >
-                                              <Play size={14} />
-                                              Start
-                                            </button>
-                                          ) : !hasStarted ? (
-                                            <button
-                                              onClick={async () => {
-                                                if (!isAuthenticated) {
-                                                  await triggerLogin()
-                                                  return
-                                                }
-                                                await handleStartProblem(problem.id)
-                                              }}
-                                              className="group w-full min-h-[32px] sm:min-h-[36px] flex items-center justify-center gap-1.5 px-3 sm:px-4 py-1.5 sm:py-2 bg-gradient-to-r from-red-500 to-rose-500 hover:from-red-600 hover:to-rose-600 dark:from-red-500 dark:to-rose-500 dark:hover:from-red-600 dark:hover:to-rose-600 text-white rounded-xl text-xs sm:text-sm font-bold transition-all duration-300 shadow-md hover:shadow-lg transform hover:scale-105 active:scale-95"
-                                            >
-                                              <Play size={14} className="group-hover:translate-x-0.5 transition-transform" />
-                                              Start
-                                            </button>
-                                          ) : isInProgress ? (
-                                            <button
-                                              onClick={async () => {
-                                                if (!isAuthenticated) {
-                                                  await triggerLogin()
-                                                  return
-                                                }
-                                                await updateProblemStatus(problem.id)
-                                              }}
-                                              className="group w-full min-h-[32px] sm:min-h-[36px] flex items-center justify-center gap-1.5 px-3 sm:px-4 py-1.5 sm:py-2 bg-gradient-to-r from-blue-500 to-indigo-500 hover:from-blue-600 hover:to-indigo-600 dark:from-blue-500 dark:to-indigo-500 dark:hover:from-blue-600 dark:hover:to-indigo-600 text-white rounded-xl text-xs sm:text-sm font-bold transition-all duration-300 shadow-md hover:shadow-lg transform hover:scale-105 active:scale-95 animate-pulse"
-                                            >
-                                              <Clock size={14} />
-                                              <span className="group-hover:hidden whitespace-nowrap">In progress</span>
-                                              <span className="hidden group-hover:inline whitespace-nowrap">Mark solved</span>
-                                            </button>
-                                          ) : (
-                                            <button
-                                              onClick={async () => {
-                                                if (!isAuthenticated) {
-                                                  await triggerLogin()
-                                                  return
-                                                }
-                                                await updateProblemStatus(problem.id)
-                                              }}
-                                              className="w-full min-h-[32px] sm:min-h-[36px] flex items-center justify-center gap-1.5 px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl text-xs sm:text-sm font-bold text-white transition-all duration-300 bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 dark:from-green-500 dark:to-emerald-500 dark:hover:from-green-600 dark:hover:to-emerald-600 shadow-md hover:shadow-lg transform hover:scale-105 active:scale-95"
-                                            >
-                                              <CheckCircle size={14} />
-                                              Solved
-                                            </button>
-                                          )}
-                                        </div>
-                                      </div>
-                                    </div>
-
-                                  ) : (
-                                    // Expanded view with 3 equal columns
-                                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 py-4 transition-all duration-300 ease-in-out">
-                                      {/* Left Column: Problem Info */}
-                                      <div className="flex items-center h-full">
-                                        {/* Centered content */}
-                                        <div className="flex flex-col gap-3 items-center justify-center w-full">
-                                          {/* First row: Problem title and difficulty */}
-                                          <div className={`flex flex-col gap-2 items-center ${!moduleHasStarted ? 'opacity-60' : ''}`}>
-                                            <div className="flex flex-col gap-2 items-center">
-                                              {moduleHasStarted ? (
-                                                <a
-                                                  href={problem.url}
-                                                  target="_blank"
-                                                  rel="noopener noreferrer"
-                                                  className="text-blue-600 dark:text-blue-400 hover:underline text-xl sm:text-2xl font-semibold text-center font-mono tracking-wide"
-                                                  style={{ fontFamily: '"Roboto Mono", "Courier New", monospace' }}
-                                                >
-                                                  {problem.name}
-                                                </a>
-                                              ) : (
-                                                <span
-                                                  className="text-blue-600 dark:text-blue-400 text-xl sm:text-2xl font-semibold text-center font-mono tracking-wide cursor-not-allowed"
-                                                  style={{ fontFamily: '"Roboto Mono", "Courier New", monospace' }}
-                                                >
-                                                  {problem.name}
-                                                </span>
-                                              )}
-                                              <div className="flex items-center gap-1 text-xs sm:text-sm text-gray-600 dark:text-gray-400">
-                                                <Users size={14} />
-                                                <span>{solveCount}</span>
-                                              </div>
-                                            </div>
-                                            {(problem.type || problem.difficulty) && (
-                                              <button
-                                                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 backdrop-blur-md border shadow-sm ${getGlassMorphismStyles(problem.difficulty)}`}
-                                              >
-                                                {problem.type && <span>{problem.type}</span>}
-                                                {problem.type && problem.difficulty && <span className="mx-1.5">•</span>}
-                                                {problem.difficulty && <span>{problem.difficulty}</span>}
-                                              </button>
-                                            )}
-                                          </div>
-
-                                          {/* Second row: Solving time and focus time */}
-                                          <div className="grid grid-cols-2 gap-3 w-full">
-                                            <div className="flex flex-col gap-1 items-center">
-                                              <span className="text-[10px] text-gray-500 dark:text-gray-400">Solving Time</span>
-                                              <div className="grid grid-cols-3 gap-1">
-                                                {(() => {
-                                                  const { hours, minutes, seconds: secs } = getTimeComponents(solvingTime)
-                                                  return (
-                                                    <>
-                                                      <div className="flex flex-col items-center justify-center px-1.5 py-1 rounded-lg bg-gray-100/50 dark:bg-gray-800/50 backdrop-blur-sm border border-gray-200/50 dark:border-gray-700/50 shadow-sm">
-                                                        <span className="text-xs font-semibold text-amber-800 dark:text-amber-600">
-                                                          {String(hours).padStart(2, '0')}
-                                                        </span>
-                                                      </div>
-                                                      <div className="flex flex-col items-center justify-center px-1.5 py-1 rounded-lg bg-gray-100/50 dark:bg-gray-800/50 backdrop-blur-sm border border-gray-200/50 dark:border-gray-700/50 shadow-sm">
-                                                        <span className="text-xs font-semibold text-amber-800 dark:text-amber-600">
-                                                          {String(minutes).padStart(2, '0')}
-                                                        </span>
-                                                      </div>
-                                                      <div className="flex flex-col items-center justify-center px-1.5 py-1 rounded-lg bg-gray-100/50 dark:bg-gray-800/50 backdrop-blur-sm border border-gray-200/50 dark:border-gray-700/50 shadow-sm">
-                                                        <span className="text-xs font-semibold text-amber-800 dark:text-amber-600">
-                                                          {String(secs).padStart(2, '0')}
-                                                        </span>
-                                                      </div>
-                                                    </>
-                                                  )
-                                                })()}
-                                              </div>
-                                            </div>
-                                            <div className="flex flex-col gap-1 items-center">
-                                              <span className="text-[10px] text-gray-500 dark:text-gray-400">Focus Time</span>
-                                              <div className="grid grid-cols-3 gap-1">
-                                                {(() => {
-                                                  // Show saved focus time + unsaved elapsed focus time in real-time
-                                                  const savedFocusTime = userSolve?.focus_time || 0
-                                                  const currentElapsedFocusTime = focusTimeElapsed[problem.id] || 0
-                                                  const lastSaved = lastSavedTimes[problem.id] || 0
-                                                  const unsavedElapsedTime = Math.max(0, currentElapsedFocusTime - lastSaved)
-                                                  const totalFocusTime = savedFocusTime + unsavedElapsedTime
-                                                  const { hours, minutes, seconds: secs } = getTimeComponents(totalFocusTime)
-                                                  return (
-                                                    <>
-                                                      <div className="flex flex-col items-center justify-center px-1.5 py-1 rounded-lg bg-gray-100/50 dark:bg-gray-800/50 backdrop-blur-sm border border-gray-200/50 dark:border-gray-700/50 shadow-sm">
-                                                        <span className="text-xs font-semibold text-amber-800 dark:text-amber-600">
-                                                          {String(hours).padStart(2, '0')}
-                                                        </span>
-                                                      </div>
-                                                      <div className="flex flex-col items-center justify-center px-1.5 py-1 rounded-lg bg-gray-100/50 dark:bg-gray-800/50 backdrop-blur-sm border border-gray-200/50 dark:border-gray-700/50 shadow-sm">
-                                                        <span className="text-xs font-semibold text-amber-800 dark:text-amber-600">
-                                                          {String(minutes).padStart(2, '0')}
-                                                        </span>
-                                                      </div>
-                                                      <div className="flex flex-col items-center justify-center px-1.5 py-1 rounded-lg bg-gray-100/50 dark:bg-gray-800/50 backdrop-blur-sm border border-gray-200/50 dark:border-gray-700/50 shadow-sm">
-                                                        <span className="text-xs font-semibold text-amber-800 dark:text-amber-600">
-                                                          {String(secs).padStart(2, '0')}
-                                                        </span>
-                                                      </div>
-                                                    </>
-                                                  )
-                                                })()}
-                                              </div>
-                                            </div>
-                                          </div>
-
-                                          {/* Third row: Problem state and Close button */}
-                                          <div className="flex flex-col gap-1 items-center w-full">
-                                            <span className="text-[10px] text-gray-500 dark:text-gray-400">Status</span>
-                                            <div className="grid grid-cols-2 gap-2 w-full">
-                                              {solvesLoading && isAuthenticated ? (
-                                                <button
-                                                  disabled
-                                                  className="w-full min-h-[32px] flex items-center justify-center px-3 py-1.5 rounded-full text-xs font-bold text-white transition-colors bg-gray-500 dark:bg-gray-500 cursor-not-allowed"
-                                                >
-                                                  Loading...
-                                                </button>
-                                              ) : !hasStarted ? (
-                                                <button
-                                                  onClick={async () => {
-                                                    if (!isAuthenticated) {
-                                                      await triggerLogin()
-                                                      return
-                                                    }
-                                                    await handleStartProblem(problem.id)
-                                                  }}
-                                                  className="w-full min-h-[32px] flex items-center justify-center gap-1 px-3 py-1.5 bg-red-500 hover:bg-red-600 dark:bg-red-500 dark:hover:bg-red-600 text-white rounded-full text-xs font-bold transition-colors"
-                                                >
-                                                  <Play size={12} />
-                                                  Start
-                                                </button>
-                                              ) : isInProgress ? (
-                                                <button
-                                                  onClick={async () => {
-                                                    if (!isAuthenticated) {
-                                                      await triggerLogin()
-                                                      return
-                                                    }
-                                                    await updateProblemStatus(problem.id)
-                                                  }}
-                                                  className="w-full min-h-[32px] flex items-center justify-center gap-1 px-3 py-1.5 bg-blue-500 hover:bg-blue-600 dark:bg-blue-500 dark:hover:bg-blue-600 text-white rounded-full text-xs font-bold transition-colors group animate-breathe"
-                                                >
-                                                  <Clock size={12} />
-                                                  <span className="group-hover:hidden whitespace-nowrap">In progress</span>
-                                                  <span className="hidden group-hover:inline whitespace-nowrap">Mark solved</span>
-                                                </button>
-                                              ) : (
-                                                <button
-                                                  onClick={async () => {
-                                                    if (!isAuthenticated) {
-                                                      await triggerLogin()
-                                                      return
-                                                    }
-                                                    await updateProblemStatus(problem.id)
-                                                  }}
-                                                  className="w-full min-h-[32px] flex items-center justify-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold text-white transition-colors bg-green-500 hover:bg-green-600 dark:bg-green-500 dark:hover:bg-green-600"
-                                                >
-                                                  <CheckCircle size={12} />
-                                                  Solved
-                                                </button>
-                                              )}
-                                              <button
-                                                onClick={async () => {
-                                                  await handleCloseFocusView(problem.id)
-                                                }}
-                                                className="w-full min-h-[32px] flex items-center justify-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold text-white transition-colors bg-gray-500 hover:bg-gray-600 dark:bg-gray-500 dark:hover:bg-gray-600"
-                                              >
-                                                Close
-                                              </button>
-                                            </div>
-                                          </div>
-                                        </div>
-                                      </div>
-
-                                      {/* Middle Column: Focus Timer */}
-                                      <div className="flex flex-col">
-                                        <div className="h-full bg-gray-50 dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
-                                          <InlinePomodoroTimer
-                                            problemId={problem.id}
-                                            problemName={problem.name}
-                                            onComplete={(seconds) => handleFocusTimeComplete(problem.id, seconds)}
-                                            onUpdate={(seconds) => handleFocusTimeUpdate(problem.id, seconds)}
-                                            onElapsedChange={(seconds) => {
-                                              // Track focus time elapsed for this problem
-                                              setFocusTimeElapsed(prev => ({ ...prev, [problem.id]: seconds }))
-                                              // Initialize lastSavedTimes if not set
-                                              setLastSavedTimes(prev => {
-                                                if (!prev[problem.id]) {
-                                                  return { ...prev, [problem.id]: 0 }
-                                                }
-                                                return prev
-                                              })
-                                            }}
-                                            onClose={async () => {
-                                              await handleCloseFocusView(problem.id)
-                                            }}
-                                          />
-                                        </div>
-                                      </div>
-
-                                      {/* Right Column: Note Editor */}
-                                      <div className="flex flex-col">
-                                        <div className="h-full bg-gray-50 dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
-                                          <InlineNoteEditor
-                                            problemId={problem.id}
-                                            initialContent={getUserSolve(problem.id)?.note || ''}
-                                            onSave={(content) => handleNoteSave(problem.id, content)}
-                                            onClose={() => setExpandedProblem(null)}
-                                            problemName={problem.name}
-                                          />
-                                        </div>
-                                      </div>
-                                    </div>
-                                  )}
-                                </div>
-                              )
-                            })}
+                            {categoryProblems.map((problem) => renderProblemRow(problem, categoryProblems.indexOf(problem) + 1))}
                           </div>
-
                         </div>
                       ))}
                     </div>
                   ) : (
                     // Display problems normally for regular days
                     <div className="space-y-3">
-                      {problems.map((problem) => {
-                        const isSolved = getProblemStatus(problem.id)
-                        const userSolve = getUserSolve(problem.id)
-                        const solveCount = solveCounts[problem.id] || 0
-                        const hasNote = userSolve?.note && userSolve.note.trim().length > 0
-                        const hasStarted = !!userSolve?.started_at
-                        const isInProgress = hasStarted && !isSolved
-
-                        // Calculate solving time
-                        // When in progress: now - started_at
-                        // When solved: solved_at - started_at
-                        let solvingTime: number = 0
-                        if (isInProgress && userSolve?.started_at) {
-                          // If in progress, show live elapsed time
-                          if (elapsedTimes[problem.id] !== undefined) {
-                            solvingTime = elapsedTimes[problem.id]
-                          } else {
-                            const startTime = new Date(userSolve.started_at).getTime()
-                            solvingTime = Math.floor((Date.now() - startTime) / 1000)
-                          }
-                        } else if (isSolved && userSolve?.solved_at && userSolve?.started_at) {
-                          // If solved, show time from started_at to solved_at
-                          if (elapsedTimes[problem.id] !== undefined) {
-                            solvingTime = elapsedTimes[problem.id]
-                          } else {
-                            const startTime = new Date(userSolve.started_at).getTime()
-                            const solvedTime = new Date(userSolve.solved_at).getTime()
-                            solvingTime = Math.floor((solvedTime - startTime) / 1000)
-                          }
-                        }
-
-                        const isExpanded = expandedProblem?.id === problem.id && (expandedProblem.showNote || expandedProblem.showFocus)
-
-                        return (
-                          <div
-                            key={problem.id}
-                            className={`border-b border-gray-100/80 dark:border-gray-700/80 last:border-b-0 transition-all duration-300 ease-in-out hover:bg-gray-50/50 dark:hover:bg-gray-700/30 rounded-lg px-2 py-1 ${isSolved ? 'bg-green-50/30 dark:bg-green-900/10' : isInProgress ? 'bg-blue-50/30 dark:bg-blue-900/10' : ''
-                              }`}
-                          >
-                            {!isExpanded ? (
-                              // Normal collapsed view
-                              <div className="flex flex-col items-center md:grid md:grid-cols-[40px_minmax(0,1fr)_auto_auto_auto_auto_auto_140px] gap-3 md:gap-3 py-3 md:items-center">
-                                <span className={`hidden md:block text-center font-bold text-gray-700 dark:text-gray-300 text-sm sm:text-base ${!moduleHasStarted ? 'opacity-60' : ''}`}>
-                                  {problems.indexOf(problem) + 1}
-                                </span>
-                                <div className={`flex items-center gap-2 ${!moduleHasStarted ? 'opacity-60' : ''} min-w-0 w-full md:w-auto`}>
-                                  <span className="md:hidden font-bold text-gray-700 dark:text-gray-300 text-sm mr-1">
-                                    {problems.indexOf(problem) + 1}.
-                                  </span>
-                                  {moduleHasStarted ? (
-                                    <a
-                                      href={problem.url}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="text-blue-600 dark:text-blue-400 hover:underline text-sm sm:text-base truncate"
-                                      title={problem.name}
-                                    >
-                                      {problem.name}
-                                    </a>
-                                  ) : (
-                                    <span className="text-blue-600 dark:text-blue-400 text-sm sm:text-base truncate cursor-not-allowed">
-                                      {problem.name}
-                                    </span>
-                                  )}
-                                  <div className="flex items-center gap-1 text-xs sm:text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap shrink-0 ml-auto md:ml-0">
-                                    <Users size={14} />
-                                    <span>{solveCount}</span>
-                                  </div>
-                                </div>
-
-                                {/* Mobile Metadata Row */}
-                                <div className="flex flex-wrap items-center justify-center gap-3 md:contents">
-                                  {/* Solving time column */}
-                                  <div className={`relative ${!moduleHasStarted ? 'opacity-60' : ''}`}>
-                                    <div className="flex flex-col gap-0.5">
-                                      <div className="grid grid-cols-3 gap-0.5">
-                                        {(() => {
-                                          const { hours, minutes, seconds: secs } = getTimeComponents(solvingTime)
-                                          return (
-                                            <>
-                                              <div className="flex flex-col items-center justify-center px-1.5 py-1 rounded-lg bg-gray-100/50 dark:bg-gray-800/50 backdrop-blur-sm border border-gray-200/50 dark:border-gray-700/50 shadow-sm">
-                                                <span className="text-xs sm:text-sm font-semibold text-amber-800 dark:text-amber-600">
-                                                  {String(hours).padStart(2, '0')}
-                                                </span>
-                                              </div>
-                                              <div className="flex flex-col items-center justify-center px-1.5 py-1 rounded-lg bg-gray-100/50 dark:bg-gray-800/50 backdrop-blur-sm border border-gray-200/50 dark:border-gray-700/50 shadow-sm">
-                                                <span className="text-xs sm:text-sm font-semibold text-amber-800 dark:text-amber-600">
-                                                  {String(minutes).padStart(2, '0')}
-                                                </span>
-                                              </div>
-                                              <div className="flex flex-col items-center justify-center px-1.5 py-1 rounded-lg bg-gray-100/50 dark:bg-gray-800/50 backdrop-blur-sm border border-gray-200/50 dark:border-gray-700/50 shadow-sm">
-                                                <span className="text-xs sm:text-sm font-semibold text-amber-800 dark:text-amber-600">
-                                                  {String(secs).padStart(2, '0')}
-                                                </span>
-                                              </div>
-                                            </>
-                                          )
-                                        })()}
-                                      </div>
-                                      <span className="text-[8px] text-gray-500 dark:text-gray-400 text-center">
-                                        solving time
-                                      </span>
-                                    </div>
-                                  </div>
-                                  {/* Focus time column */}
-                                  <div className={`relative ${!moduleHasStarted ? 'opacity-60' : ''}`}>
-                                    <div className="flex flex-col gap-0.5">
-                                      <div className="grid grid-cols-3 gap-0.5">
-                                        {(() => {
-                                          const { hours, minutes, seconds: secs } = getTimeComponents(userSolve?.focus_time || 0)
-                                          return (
-                                            <>
-                                              <div className="flex flex-col items-center justify-center px-1.5 py-1 rounded-lg bg-gray-100/50 dark:bg-gray-800/50 backdrop-blur-sm border border-gray-200/50 dark:border-gray-700/50 shadow-sm">
-                                                <span className="text-xs sm:text-sm font-semibold text-amber-800 dark:text-amber-600">
-                                                  {String(hours).padStart(2, '0')}
-                                                </span>
-                                              </div>
-                                              <div className="flex flex-col items-center justify-center px-1.5 py-1 rounded-lg bg-gray-100/50 dark:bg-gray-800/50 backdrop-blur-sm border border-gray-200/50 dark:border-gray-700/50 shadow-sm">
-                                                <span className="text-xs sm:text-sm font-semibold text-amber-800 dark:text-amber-600">
-                                                  {String(minutes).padStart(2, '0')}
-                                                </span>
-                                              </div>
-                                              <div className="flex flex-col items-center justify-center px-1.5 py-1 rounded-lg bg-gray-100/50 dark:bg-gray-800/50 backdrop-blur-sm border border-gray-200/50 dark:border-gray-700/50 shadow-sm">
-                                                <span className="text-xs sm:text-sm font-semibold text-amber-800 dark:text-amber-600">
-                                                  {String(secs).padStart(2, '0')}
-                                                </span>
-                                              </div>
-                                            </>
-                                          )
-                                        })()}
-                                      </div>
-                                      <span className="text-[8px] text-gray-500 dark:text-gray-400 text-center">
-                                        focus time
-                                      </span>
-                                    </div>
-                                  </div>
-                                  {/* Type/Difficulty column */}
-                                  <div className={`relative ${!moduleHasStarted ? 'opacity-60' : ''}`}>
-                                    {(problem.type || problem.difficulty) && (
-                                      <button
-                                        className={`px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all duration-200 backdrop-blur-md border shadow-sm ${getGlassMorphismStyles(problem.difficulty)}`}
-                                      >
-                                        {problem.type && <span>{problem.type}</span>}
-                                        {problem.type && problem.difficulty && <span className="mx-1.5">•</span>}
-                                        {problem.difficulty && <span>{problem.difficulty}</span>}
-                                      </button>
-                                    )}
-                                  </div>
-                                </div>
-
-                                {/* Mobile Actions Row */}
-                                <div className="flex items-center justify-center gap-2 w-full md:w-auto md:contents mt-1 md:mt-0">
-                                  {/* Focus button column */}
-                                  <div className={`relative ${!moduleHasStarted ? 'opacity-60' : ''}`}>
-                                    <button
-                                      onClick={async () => {
-                                        if (!moduleHasStarted) return
-                                        if (!isAuthenticated) {
-                                          await triggerLogin()
-                                          return
-                                        }
-                                        toggleFocus(problem.id)
-                                      }}
-                                      disabled={!moduleHasStarted}
-                                      className={`group flex flex-col items-center justify-center gap-0.5 px-3 py-2 rounded-lg transition-all ${moduleHasStarted
-                                        ? 'hover:bg-blue-50 dark:hover:bg-blue-900/20 cursor-pointer hover:scale-105'
-                                        : 'opacity-50 cursor-not-allowed'
-                                        }`}
-                                      title="Focus timer"
-                                    >
-                                      <div className={`p-1.5 rounded-lg transition-colors ${moduleHasStarted
-                                        ? 'bg-blue-100 dark:bg-blue-900/30 group-hover:bg-blue-200 dark:group-hover:bg-blue-900/50'
-                                        : 'bg-gray-100 dark:bg-gray-700'
-                                        }`}>
-                                        <Timer size={20} className="text-blue-600 dark:text-blue-400" />
-                                      </div>
-                                      <span className="text-[9px] leading-tight text-gray-600 dark:text-gray-400 font-medium">focus</span>
-                                    </button>
-                                  </div>
-                                  {/* Note button column */}
-                                  <div className={`relative ${!moduleHasStarted ? 'opacity-60' : ''}`}>
-                                    <button
-                                      onClick={async () => {
-                                        if (!moduleHasStarted) return
-                                        if (!isAuthenticated) {
-                                          await triggerLogin()
-                                          return
-                                        }
-                                        toggleNote(problem.id)
-                                      }}
-                                      disabled={!moduleHasStarted}
-                                      className={`group flex flex-col items-center justify-center gap-0.5 px-3 py-2 rounded-lg transition-all ${moduleHasStarted
-                                        ? 'hover:bg-green-50 dark:hover:bg-green-900/20 cursor-pointer hover:scale-105'
-                                        : 'opacity-50 cursor-not-allowed'
-                                        }`}
-                                      title="Edit note"
-                                    >
-                                      <div className={`p-1.5 rounded-lg transition-colors ${hasNote
-                                        ? 'bg-green-100 dark:bg-green-900/30 group-hover:bg-green-200 dark:group-hover:bg-green-900/50'
-                                        : moduleHasStarted
-                                          ? 'bg-gray-100 dark:bg-gray-700 group-hover:bg-gray-200 dark:group-hover:bg-gray-600'
-                                          : 'bg-gray-100 dark:bg-gray-700'
-                                        }`}>
-                                        <NotepadText
-                                          size={20}
-                                          className={hasNote ? 'text-green-600 dark:text-green-400' : 'text-gray-600 dark:text-gray-400'}
-                                        />
-                                      </div>
-                                      <span className="text-[9px] leading-tight text-gray-600 dark:text-gray-400 font-medium">note</span>
-                                    </button>
-                                  </div>
-                                  {/* State button column */}
-                                  <div className={`relative ${!moduleHasStarted ? 'opacity-60' : ''} flex-1 md:flex-none`}>
-                                    {solvesLoading && isAuthenticated ? (
-                                      <button
-                                        disabled
-                                        className="w-full min-h-[32px] sm:min-h-[36px] flex items-center justify-center px-3 sm:px-4 py-1.5 sm:py-2 rounded-full text-xs sm:text-sm font-bold text-white transition-colors bg-gray-500 dark:bg-gray-500 cursor-not-allowed"
-                                      >
-                                        Loading...
-                                      </button>
-                                    ) : !moduleHasStarted ? (
-                                      <button
-                                        disabled
-                                        className="w-full min-h-[32px] sm:min-h-[36px] flex items-center justify-center gap-1 px-3 sm:px-4 py-1.5 sm:py-2 bg-gray-400 dark:bg-gray-600 text-white rounded-full text-xs sm:text-sm font-bold cursor-not-allowed opacity-60"
-                                      >
-                                        <Play size={14} />
-                                        Start
-                                      </button>
-                                    ) : !hasStarted ? (
-                                      <button
-                                        onClick={async () => {
-                                          if (!isAuthenticated) {
-                                            await triggerLogin()
-                                            return
-                                          }
-                                          await handleStartProblem(problem.id)
-                                        }}
-                                        className="group w-full min-h-[32px] sm:min-h-[36px] flex items-center justify-center gap-1.5 px-3 sm:px-4 py-1.5 sm:py-2 bg-gradient-to-r from-red-500 to-rose-500 hover:from-red-600 hover:to-rose-600 dark:from-red-500 dark:to-rose-500 dark:hover:from-red-600 dark:hover:to-rose-600 text-white rounded-xl text-xs sm:text-sm font-bold transition-all duration-300 shadow-md hover:shadow-lg transform hover:scale-105 active:scale-95"
-                                      >
-                                        <Play size={14} className="group-hover:translate-x-0.5 transition-transform" />
-                                        Start
-                                      </button>
-                                    ) : isInProgress ? (
-                                      <button
-                                        onClick={async () => {
-                                          if (!isAuthenticated) {
-                                            await triggerLogin()
-                                            return
-                                          }
-                                          await updateProblemStatus(problem.id)
-                                        }}
-                                        className="group w-full min-h-[32px] sm:min-h-[36px] flex items-center justify-center gap-1.5 px-3 sm:px-4 py-1.5 sm:py-2 bg-gradient-to-r from-blue-500 to-indigo-500 hover:from-blue-600 hover:to-indigo-600 dark:from-blue-500 dark:to-indigo-500 dark:hover:from-blue-600 dark:hover:to-indigo-600 text-white rounded-xl text-xs sm:text-sm font-bold transition-all duration-300 shadow-md hover:shadow-lg transform hover:scale-105 active:scale-95 animate-pulse"
-                                      >
-                                        <Clock size={14} />
-                                        <span className="group-hover:hidden whitespace-nowrap">In progress</span>
-                                        <span className="hidden group-hover:inline whitespace-nowrap">Mark solved</span>
-                                      </button>
-                                    ) : (
-                                      <button
-                                        onClick={async () => {
-                                          if (!isAuthenticated) {
-                                            await triggerLogin()
-                                            return
-                                          }
-                                          await updateProblemStatus(problem.id)
-                                        }}
-                                        className="w-full min-h-[32px] sm:min-h-[36px] flex items-center justify-center gap-1.5 px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl text-xs sm:text-sm font-bold text-white transition-all duration-300 bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 dark:from-green-500 dark:to-emerald-500 dark:hover:from-green-600 dark:hover:to-emerald-600 shadow-md hover:shadow-lg transform hover:scale-105 active:scale-95"
-                                      >
-                                        <CheckCircle size={14} />
-                                        Solved
-                                      </button>
-                                    )}
-                                  </div>
-                                </div>
-                              </div>
-
-                            ) : (
-                              // Expanded view - same as before
-                              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 py-4 transition-all duration-300 ease-in-out">
-                                {/* Left Column: Problem Info */}
-                                <div className="flex items-center h-full">
-                                  {/* Centered content */}
-                                  <div className="flex flex-col gap-3 items-center justify-center w-full">
-                                    {/* First row: Problem title and difficulty */}
-                                    <div className={`flex flex-col gap-2 items-center ${!moduleHasStarted ? 'opacity-60' : ''}`}>
-                                      <div className="flex flex-col gap-2 items-center">
-                                        {moduleHasStarted ? (
-                                          <a
-                                            href={problem.url}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="text-blue-600 dark:text-blue-400 hover:underline text-xl sm:text-2xl font-semibold text-center font-mono tracking-wide"
-                                            style={{ fontFamily: '"Roboto Mono", "Courier New", monospace' }}
-                                          >
-                                            {problem.name}
-                                          </a>
-                                        ) : (
-                                          <span
-                                            className="text-blue-600 dark:text-blue-400 text-xl sm:text-2xl font-semibold text-center font-mono tracking-wide cursor-not-allowed"
-                                            style={{ fontFamily: '"Roboto Mono", "Courier New", monospace' }}
-                                          >
-                                            {problem.name}
-                                          </span>
-                                        )}
-                                        <div className="flex items-center gap-1 text-xs sm:text-sm text-gray-600 dark:text-gray-400">
-                                          <Users size={14} />
-                                          <span>{solveCount}</span>
-                                        </div>
-                                      </div>
-                                      {(problem.type || problem.difficulty) && (
-                                        <button
-                                          className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 backdrop-blur-md border shadow-sm ${getGlassMorphismStyles(problem.difficulty)}`}
-                                        >
-                                          {problem.type && <span>{problem.type}</span>}
-                                          {problem.type && problem.difficulty && <span className="mx-1.5">•</span>}
-                                          {problem.difficulty && <span>{problem.difficulty}</span>}
-                                        </button>
-                                      )}
-                                    </div>
-
-                                    {/* Second row: Solving time and focus time */}
-                                    <div className="grid grid-cols-2 gap-3 w-full">
-                                      <div className="flex flex-col gap-1 items-center">
-                                        <span className="text-[10px] text-gray-500 dark:text-gray-400">Solving Time</span>
-                                        <div className="grid grid-cols-3 gap-1">
-                                          {(() => {
-                                            const { hours, minutes, seconds: secs } = getTimeComponents(solvingTime)
-                                            return (
-                                              <>
-                                                <div className="flex flex-col items-center justify-center px-1.5 py-1 rounded-lg bg-gray-100/50 dark:bg-gray-800/50 backdrop-blur-sm border border-gray-200/50 dark:border-gray-700/50 shadow-sm">
-                                                  <span className="text-xs font-semibold text-amber-800 dark:text-amber-600">
-                                                    {String(hours).padStart(2, '0')}
-                                                  </span>
-                                                </div>
-                                                <div className="flex flex-col items-center justify-center px-1.5 py-1 rounded-lg bg-gray-100/50 dark:bg-gray-800/50 backdrop-blur-sm border border-gray-200/50 dark:border-gray-700/50 shadow-sm">
-                                                  <span className="text-xs font-semibold text-amber-800 dark:text-amber-600">
-                                                    {String(minutes).padStart(2, '0')}
-                                                  </span>
-                                                </div>
-                                                <div className="flex flex-col items-center justify-center px-1.5 py-1 rounded-lg bg-gray-100/50 dark:bg-gray-800/50 backdrop-blur-sm border border-gray-200/50 dark:border-gray-700/50 shadow-sm">
-                                                  <span className="text-xs font-semibold text-amber-800 dark:text-amber-600">
-                                                    {String(secs).padStart(2, '0')}
-                                                  </span>
-                                                </div>
-                                              </>
-                                            )
-                                          })()}
-                                        </div>
-                                      </div>
-                                      <div className="flex flex-col gap-1 items-center">
-                                        <span className="text-[10px] text-gray-500 dark:text-gray-400">Focus Time</span>
-                                        <div className="grid grid-cols-3 gap-1">
-                                          {(() => {
-                                            // Show saved focus time + unsaved elapsed focus time in real-time
-                                            const savedFocusTime = userSolve?.focus_time || 0
-                                            const currentElapsedFocusTime = focusTimeElapsed[problem.id] || 0
-                                            const lastSaved = lastSavedTimes[problem.id] || 0
-                                            const unsavedElapsedTime = Math.max(0, currentElapsedFocusTime - lastSaved)
-                                            const totalFocusTime = savedFocusTime + unsavedElapsedTime
-                                            const { hours, minutes, seconds: secs } = getTimeComponents(totalFocusTime)
-                                            return (
-                                              <>
-                                                <div className="flex flex-col items-center justify-center px-1.5 py-1 rounded-lg bg-gray-100/50 dark:bg-gray-800/50 backdrop-blur-sm border border-gray-200/50 dark:border-gray-700/50 shadow-sm">
-                                                  <span className="text-xs font-semibold text-amber-800 dark:text-amber-600">
-                                                    {String(hours).padStart(2, '0')}
-                                                  </span>
-                                                </div>
-                                                <div className="flex flex-col items-center justify-center px-1.5 py-1 rounded-lg bg-gray-100/50 dark:bg-gray-800/50 backdrop-blur-sm border border-gray-200/50 dark:border-gray-700/50 shadow-sm">
-                                                  <span className="text-xs font-semibold text-amber-800 dark:text-amber-600">
-                                                    {String(minutes).padStart(2, '0')}
-                                                  </span>
-                                                </div>
-                                                <div className="flex flex-col items-center justify-center px-1.5 py-1 rounded-lg bg-gray-100/50 dark:bg-gray-800/50 backdrop-blur-sm border border-gray-200/50 dark:border-gray-700/50 shadow-sm">
-                                                  <span className="text-xs font-semibold text-amber-800 dark:text-amber-600">
-                                                    {String(secs).padStart(2, '0')}
-                                                  </span>
-                                                </div>
-                                              </>
-                                            )
-                                          })()}
-                                        </div>
-                                      </div>
-                                    </div>
-
-                                    {/* Third row: Problem state and Close button */}
-                                    <div className="flex flex-col gap-1 items-center w-full">
-                                      <span className="text-[10px] text-gray-500 dark:text-gray-400">Status</span>
-                                      <div className="grid grid-cols-2 gap-2 w-full">
-                                        {solvesLoading && isAuthenticated ? (
-                                          <button
-                                            disabled
-                                            className="w-full min-h-[32px] flex items-center justify-center px-3 py-1.5 rounded-full text-xs font-bold text-white transition-colors bg-gray-500 dark:bg-gray-500 cursor-not-allowed"
-                                          >
-                                            Loading...
-                                          </button>
-                                        ) : !hasStarted ? (
-                                          <button
-                                            onClick={async () => {
-                                              if (!isAuthenticated) {
-                                                await triggerLogin()
-                                                return
-                                              }
-                                              await handleStartProblem(problem.id)
-                                            }}
-                                            className="w-full min-h-[32px] flex items-center justify-center gap-1 px-3 py-1.5 bg-red-500 hover:bg-red-600 dark:bg-red-500 dark:hover:bg-red-600 text-white rounded-full text-xs font-bold transition-colors"
-                                          >
-                                            <Play size={12} />
-                                            Start
-                                          </button>
-                                        ) : isInProgress ? (
-                                          <button
-                                            onClick={async () => {
-                                              if (!isAuthenticated) {
-                                                await triggerLogin()
-                                                return
-                                              }
-                                              await updateProblemStatus(problem.id)
-                                            }}
-                                            className="w-full min-h-[32px] flex items-center justify-center gap-1 px-3 py-1.5 bg-blue-500 hover:bg-blue-600 dark:bg-blue-500 dark:hover:bg-blue-600 text-white rounded-full text-xs font-bold transition-colors group animate-breathe"
-                                          >
-                                            <Clock size={12} />
-                                            <span className="group-hover:hidden whitespace-nowrap">In progress</span>
-                                            <span className="hidden group-hover:inline whitespace-nowrap">Mark solved</span>
-                                          </button>
-                                        ) : (
-                                          <button
-                                            onClick={async () => {
-                                              if (!isAuthenticated) {
-                                                await triggerLogin()
-                                                return
-                                              }
-                                              await updateProblemStatus(problem.id)
-                                            }}
-                                            className="w-full min-h-[32px] flex items-center justify-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold text-white transition-colors bg-green-500 hover:bg-green-600 dark:bg-green-500 dark:hover:bg-green-600"
-                                          >
-                                            <CheckCircle size={12} />
-                                            Solved
-                                          </button>
-                                        )}
-                                        <button
-                                          onClick={async () => {
-                                            await handleCloseFocusView(problem.id)
-                                          }}
-                                          className="w-full min-h-[32px] flex items-center justify-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold text-white transition-colors bg-gray-500 hover:bg-gray-600 dark:bg-gray-500 dark:hover:bg-gray-600"
-                                        >
-                                          Close
-                                        </button>
-                                      </div>
-                                    </div>
-                                  </div>
-                                </div>
-
-                                {/* Middle Column: Focus Timer */}
-                                <div className="flex flex-col">
-                                  <div className="h-full bg-gray-50 dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
-                                    <InlinePomodoroTimer
-                                      problemId={problem.id}
-                                      problemName={problem.name}
-                                      onComplete={(seconds) => handleFocusTimeComplete(problem.id, seconds)}
-                                      onUpdate={(seconds) => handleFocusTimeUpdate(problem.id, seconds)}
-                                      onElapsedChange={(seconds) => {
-                                        // Track focus time elapsed for this problem
-                                        setFocusTimeElapsed(prev => ({ ...prev, [problem.id]: seconds }))
-                                        // Initialize lastSavedTimes if not set
-                                        setLastSavedTimes(prev => {
-                                          if (!prev[problem.id]) {
-                                            return { ...prev, [problem.id]: 0 }
-                                          }
-                                          return prev
-                                        })
-                                      }}
-                                      onClose={async () => {
-                                        await handleCloseFocusView(problem.id)
-                                      }}
-                                    />
-                                  </div>
-                                </div>
-
-                                {/* Right Column: Note Editor */}
-                                <div className="flex flex-col">
-                                  <div className="h-full bg-gray-50 dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
-                                    <InlineNoteEditor
-                                      problemId={problem.id}
-                                      initialContent={getUserSolve(problem.id)?.note || ''}
-                                      onSave={(content) => handleNoteSave(problem.id, content)}
-                                      onClose={() => setExpandedProblem(null)}
-                                      problemName={problem.name}
-                                    />
-                                  </div>
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        )
-                      })}
+                      {problems.map((problem) => renderProblemRow(problem, problems.indexOf(problem) + 1))}
                     </div>
-                  )
-                  }
+                  )}
                 </div>
               )
-
-            }
-            )
-          )
-          }
+            })
+          )}
         </div>
       </div>
     </div>
   )
 }
-
-

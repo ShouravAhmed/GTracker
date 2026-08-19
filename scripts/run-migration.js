@@ -115,8 +115,10 @@ async function runMigration() {
     process.exit(1)
   }
 
-  // Read migration file
-  const migrationFileName = '001_initial_schema.sql'
+  // Read migration file (defaults to the initial schema for backwards-compat
+  // with `npm run migrate`; pass a filename to run a different migration,
+  // e.g. `node scripts/run-migration.js 002_add_rating_followup.sql`)
+  const migrationFileName = process.argv[2] || '001_initial_schema.sql'
   const migrationPath = path.join(__dirname, '..', 'supabase', 'migrations', migrationFileName)
   let migrationSQL
 
@@ -180,16 +182,22 @@ async function runMigration() {
 
     console.log('✅ Migration executed successfully!')
     console.log('')
-    console.log('🎉 Migration complete! All tables have been created:')
-    console.log('   - 150DayProblems (stores all problems)')
-    console.log('   - user_solves (tracks user progress on problems)')
-    console.log('   - user_module_starts (tracks when users start modules)')
-    console.log('')
-    console.log('   Next steps:')
-    console.log('   1. Restart your dev server (npm run dev)')
-    console.log('   2. Run: npm run upload-150day-problems (to populate problems)')
-    console.log('   3. Try starting a module from the home page or category page')
-    console.log('   4. Check Supabase Dashboard > Table Editor to see the data')
+
+    if (migrationFileName === '001_initial_schema.sql') {
+      console.log('🎉 Migration complete! All tables have been created:')
+      console.log('   - 150DayProblems (stores all problems)')
+      console.log('   - user_solves (tracks user progress on problems)')
+      console.log('   - user_module_starts (tracks when users start modules)')
+      console.log('')
+      console.log('   Next steps:')
+      console.log('   1. Restart your dev server (npm run dev)')
+      console.log('   2. Run: npm run upload-150day-problems (to populate problems)')
+      console.log('   3. Try starting a module from the home page or category page')
+      console.log('   4. Check Supabase Dashboard > Table Editor to see the data')
+    } else {
+      console.log(`🎉 Migration "${migrationFileName}" applied successfully.`)
+      console.log('   No existing data was modified — this migration only adds new columns/indexes.')
+    }
 
   } catch (error) {
     console.error('❌ Error running migration:')

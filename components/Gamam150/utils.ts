@@ -35,6 +35,18 @@ export const getTimeComponents = (seconds: number): { hours: number; minutes: nu
 }
 
 /**
+ * Whether a note's rich-text HTML has any actual visible content.
+ * A contentEditable note that's been typed into and then fully cleared
+ * often leaves stray markup behind (e.g. "<br>" or "<div><br></div>")
+ * instead of an empty string, which plain .trim() won't catch.
+ */
+export const hasVisibleContent = (html?: string | null): boolean => {
+  if (!html) return false
+  const text = html.replace(/<[^>]*>/g, '').replace(/&nbsp;/gi, ' ')
+  return text.trim().length > 0
+}
+
+/**
  * Get difficulty color class based on difficulty string
  */
 export const getDifficultyColor = (difficulty?: string): string => {

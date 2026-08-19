@@ -6,8 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
+    "lint": "eslint .",
     "migrate": "node scripts/run-migration.js",
+    "migrate:ratings": "node scripts/run-migration.js 002_add_rating_followup.sql",
     "upload-150day-problems": "node scripts/upload-150day-problems.js"
   },
   "dependencies": {

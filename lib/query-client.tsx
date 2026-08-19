@@ -49,61 +49,62 @@ function saveCache(cache: Record<string, any>) {
 export function QueryProvider({ children }: { children: React.ReactNode }) {
   const saveTimeoutRef = useRef<NodeJS.Timeout | undefined>(undefined)
 
+  // Cache restoration from localStorage must NOT happen synchronously during
+  // the initial render — the server has no localStorage, so doing it here
+  // makes the client's first render diverge from the server-rendered HTML
+  // (a hydration mismatch). It's restored in an effect after mount instead,
+  // once hydration has already reconciled against the server output.
   const [queryClient] = useState(
-    () => {
-      const client = new QueryClient({
-        defaultOptions: {
-          queries: {
-            // Cache data for 10 minutes
-            staleTime: 10 * 60 * 1000,
-            // Keep data in cache for 30 minutes
-            gcTime: 30 * 60 * 1000,
-            // Retry failed requests once
-            retry: 1,
-            // Refetch on window focus (but use cached data if fresh)
-            refetchOnWindowFocus: false,
-            // Don't refetch on mount if data is fresh
-            refetchOnMount: false,
-            // Don't refetch on reconnect if data is fresh
-            refetchOnReconnect: false,
-          },
+    () => new QueryClient({
+      defaultOptions: {
+        queries: {
+          // Cache data for 10 minutes
+          staleTime: 10 * 60 * 1000,
+          // Keep data in cache for 30 minutes
+          gcTime: 30 * 60 * 1000,
+          // Retry failed requests once
+          retry: 1,
+          // Refetch on window focus (but use cached data if fresh)
+          refetchOnWindowFocus: false,
+          // Don't refetch on mount if data is fresh
+          refetchOnMount: false,
+          // Don't refetch on reconnect if data is fresh
+          refetchOnReconnect: false,
         },
+      },
+    })
+  )
+
+  // Restore cache from localStorage once, after mount
+  useEffect(() => {
+    const restoredCache = restoreCache()
+    if (!restoredCache) return
+
+    try {
+      let restoredCount = 0
+
+      Object.entries(restoredCache).forEach(([key, value]: [string, any]) => {
+        if (value && value.data !== undefined) {
+          try {
+            const queryKey = JSON.parse(key)
+            queryClient.setQueryData(queryKey, value.data)
+            restoredCount++
+          } catch (e) {
+            // Skip invalid cache entries
+            console.warn('Skipping invalid cache entry:', key, e)
+          }
+        }
       })
 
-      // Restore cache from localStorage on initialization
-      const restoredCache = restoreCache()
-      if (restoredCache) {
-        try {
-          const queryCache = client.getQueryCache()
-          let restoredCount = 0
-
-          Object.entries(restoredCache).forEach(([key, value]: [string, any]) => {
-            if (value && value.data !== undefined) {
-              try {
-                const queryKey = JSON.parse(key)
-                const dataUpdatedAt = value.dataUpdatedAt || Date.now()
-
-                // Set the query in cache with proper state
-                client.setQueryData(queryKey, value.data)
-                restoredCount++
-              } catch (e) {
-                // Skip invalid cache entries
-                console.warn('Skipping invalid cache entry:', key, e)
-              }
-            }
-          })
-
-          if (restoredCount > 0) {
-            console.log(`✅ Restored ${restoredCount} queries from localStorage cache`)
-          }
-        } catch (error) {
-          console.error('Error hydrating cache:', error)
-        }
+      if (restoredCount > 0) {
+        console.log(`✅ Restored ${restoredCount} queries from localStorage cache`)
       }
-
-      return client
+    } catch (error) {
+      console.error('Error hydrating cache:', error)
     }
-  )
+    // Runs once on mount only — the query client instance is stable for the component's lifetime
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // Save cache to localStorage whenever it changes (debounced)
   useEffect(() => {

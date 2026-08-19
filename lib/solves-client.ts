@@ -13,6 +13,8 @@ import {
   startProblem as startProblemServer,
   updateFocusTime as updateFocusTimeServer,
   updateProblemNote as updateProblemNoteServer,
+  updateProblemRating as updateProblemRatingServer,
+  toggleProblemFollowup as toggleProblemFollowupServer,
   startModule as startModuleServer,
   isModuleStarted as isModuleStartedServer,
   getUserModuleStarts,
@@ -480,6 +482,114 @@ export function useSolves() {
     return true
   }, [isAuthenticated, updateNoteMutation])
 
+  // Update rating mutation
+  const updateRatingMutation = useMutation({
+    mutationFn: async ({ problemId, rating }: { problemId: string; rating: number | null }) => {
+      if (!isAuthenticated) return false
+      const ok = await updateProblemRatingServer(problemId, rating)
+      if (!ok) throw new Error('Failed to save rating')
+      return true
+    },
+    onMutate: async ({ problemId, rating }) => {
+      await queryClient.cancelQueries({ queryKey: QUERY_KEYS.userSolves })
+      const previousSolves = queryClient.getQueryData<Record<string, UserSolve>>(QUERY_KEYS.userSolves)
+
+      queryClient.setQueryData<Record<string, UserSolve>>(QUERY_KEYS.userSolves, (old = {}) => {
+        const updated = { ...old }
+        const now = new Date().toISOString()
+        if (updated[problemId]) {
+          updated[problemId] = {
+            ...updated[problemId],
+            rating,
+            rated_at: rating === null ? null : now,
+          }
+        } else {
+          updated[problemId] = {
+            id: '',
+            user_id: '',
+            problem_id: problemId,
+            solved: false,
+            focus_time: 0,
+            rating,
+            rated_at: rating === null ? null : now,
+            created_at: now,
+            updated_at: now,
+          }
+        }
+        return updated
+      })
+
+      return { previousSolves }
+    },
+    onError: (_err, _variables, context) => {
+      if (context?.previousSolves) {
+        queryClient.setQueryData(QUERY_KEYS.userSolves, context.previousSolves)
+      }
+      showToast('Failed to save rating. Please try again.')
+    },
+  })
+
+  // Update rating
+  const updateRating = useCallback(async (problemId: string, rating: number | null): Promise<boolean> => {
+    if (!isAuthenticated) return false
+    updateRatingMutation.mutate({ problemId, rating })
+    return true
+  }, [isAuthenticated, updateRatingMutation])
+
+  // Toggle follow-up mutation
+  const toggleFollowupMutation = useMutation({
+    mutationFn: async (problemId: string) => {
+      if (!isAuthenticated) return false
+      return await toggleProblemFollowupServer(problemId)
+    },
+    onMutate: async (problemId: string) => {
+      await queryClient.cancelQueries({ queryKey: QUERY_KEYS.userSolves })
+      const previousSolves = queryClient.getQueryData<Record<string, UserSolve>>(QUERY_KEYS.userSolves)
+
+      queryClient.setQueryData<Record<string, UserSolve>>(QUERY_KEYS.userSolves, (old = {}) => {
+        const updated = { ...old }
+        const now = new Date().toISOString()
+        const nextFollowup = !(old[problemId]?.followup ?? false)
+
+        if (updated[problemId]) {
+          updated[problemId] = {
+            ...updated[problemId],
+            followup: nextFollowup,
+            followup_at: nextFollowup ? now : null,
+          }
+        } else {
+          updated[problemId] = {
+            id: '',
+            user_id: '',
+            problem_id: problemId,
+            solved: false,
+            focus_time: 0,
+            followup: nextFollowup,
+            followup_at: nextFollowup ? now : null,
+            created_at: now,
+            updated_at: now,
+          }
+        }
+        return updated
+      })
+
+      return { previousSolves }
+    },
+    onError: (_err, _variables, context) => {
+      if (context?.previousSolves) {
+        queryClient.setQueryData(QUERY_KEYS.userSolves, context.previousSolves)
+      }
+      showToast('Failed to update follow-up. Please try again.')
+    },
+  })
+
+  // Toggle follow-up
+  const toggleFollowup = useCallback(async (problemId: string): Promise<boolean> => {
+    if (!isAuthenticated) return false
+    toggleFollowupMutation.mutate(problemId)
+    return true
+  }, [isAuthenticated, toggleFollowupMutation])
+
   // Login function
   const triggerLogin = useCallback(async (): Promise<void> => {
     const redirectTo = typeof window !== 'undefined'
@@ -578,6 +688,8 @@ export function useSolves() {
     startProblem,
     updateFocusTime,
     updateNote,
+    updateRating,
+    toggleFollowup,
     triggerLogin,
     startModule,
     checkModuleStarted,
