@@ -37,10 +37,15 @@ export default function Navbar() {
   }, [supabase.auth])
 
   const handleLogin = async () => {
-    // Get the current origin, handling both client-side and server-side
+    // Get the current origin - always use window.location.origin in client-side
+    // This ensures we use the actual deployed URL (Netlify) in production
     const redirectTo = typeof window !== 'undefined' 
       ? `${window.location.origin}/auth/callback`
-      : `${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/auth/callback`
+      : `${process.env.NEXT_PUBLIC_SITE_URL || process.env.VERCEL_URL || 'http://localhost:3000'}/auth/callback`
+
+    console.log('[NAVBAR] OAuth redirect URL:', redirectTo)
+    console.log('[NAVBAR] Window origin:', typeof window !== 'undefined' ? window.location.origin : 'N/A')
+    console.log('[NAVBAR] NEXT_PUBLIC_SITE_URL:', process.env.NEXT_PUBLIC_SITE_URL)
 
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
@@ -54,7 +59,7 @@ export default function Navbar() {
     })
 
     if (error) {
-      console.error('Error signing in with Google:', error)
+      console.error('[NAVBAR] Error signing in with Google:', error)
       alert(`Error signing in: ${error.message}`)
     }
   }
